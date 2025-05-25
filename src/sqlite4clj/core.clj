@@ -121,6 +121,9 @@
          (q ~tx ["COMMIT;"])
          (BlockingQueue/.offer conn-pool# ~tx)))))
 
+;; WAL + single writer enforced at the application layer means you don't need
+;; to handle SQLITE_BUSY or SQLITE_LOCKED.
+
 ;; TODO: errors
 ;; TODO: response type
 ;; TODO: faster response build
