@@ -42,10 +42,11 @@
 (defn- q* [stmt]
   (let [c-fn (column-vals-fn stmt)
         rs   (loop [rows (transient [])]
-               (case (int (api/step stmt))
-                 100 (recur (conj! rows (c-fn)))
-                 101 (persistent! rows)
-                 :error))]
+               (let [code (int (api/step stmt))]
+                 (case code
+                   100 (recur (conj! rows (c-fn)))
+                   101 (persistent! rows)
+                   {:error code})))]
     (api/reset stmt)
     (api/clear-bindings stmt)
     rs))

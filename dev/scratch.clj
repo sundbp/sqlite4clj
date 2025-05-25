@@ -22,6 +22,7 @@
      :pragma    {:foreign_keys false}}))
 
 (comment
+  
   (d/q db ["pragma mmap_size;"])
   (d/q db ["pragma cache_size;"])
   (d/q db ["journal_size_limit;"])
@@ -104,6 +105,19 @@
   (d/q write-db ["vacuum"])
   (d/q write-db ["optimize"])
 
+  "134"
+
+  (d/q db ["SELECT checks FROM session WHERE id = ?" "134"])
+  (d/q db ["SELECT checks FROM session WHERE id = ?" "134"])
+  (d/q db ["SELECT checks FROM session WHERE id = ?" 34])
+  
+  (d/q db ["SELECT checks FROM session WHERE id = ?" "foo"])
+  (d/q db ["SELECT id FROM session"])
+  
+  (d/q write-db ["SELECT * FROM session WHERE id = ?" "bar"])
   (+ 3 4)
+  (time
+    (d/q write-db
+    ["INSERT INTO session (id, checks) VALUES (?, ?)" "stro" 1]))
 
   )

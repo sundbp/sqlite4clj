@@ -78,12 +78,14 @@
 (defcfn bind-text
   "sqlite3_bind_text"
   [::mem/pointer ::mem/int ::mem/c-string ::mem/int
-   [::ffi/fn [::mem/pointer] ::mem/void]] ::mem/int
+   ::mem/pointer] ::mem/int
   sqlite3-bind-text-native
   [pdb idx text]
-  (let [text (str text)]
-    (sqlite3-bind-text-native pdb idx text
-      (count (String/.getBytes text "UTF-8"))
+  (let [text       (str text)
+        text-bytes (String/.getBytes text "UTF-8")]
+    (sqlite3-bind-text-native pdb idx
+      (String/new text-bytes "UTF-8")
+      (count text-bytes)
       sqlite-transient)))
 
 (defcfn step
