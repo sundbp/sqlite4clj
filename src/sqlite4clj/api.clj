@@ -41,15 +41,19 @@
   sqlite3_close
   [::mem/pointer] ::mem/int)
 
-(defcfn prepare-v2
-  "sqlite3_prepare_v2"
+(defcfn prepare-v3
+  "sqlite3_prepare_v3"
   [::mem/pointer ::mem/c-string ::mem/int
+   ::mem/int
    ::mem/pointer ::mem/pointer] ::mem/int
   sqlite3-prepare-native
   [pdb sql]
   (with-open [arena (mem/confined-arena)]
     (let [ppStmt (mem/alloc-instance ::mem/pointer arena)
-          code   (sqlite3-prepare-native pdb sql -1 ppStmt
+          sql    (String/new (String/.getBytes sql "UTF-8") "UTF-8")
+          code   (sqlite3-prepare-native pdb sql -1
+                   0x01 ;; SQLITE_PREPARE_PERSISTENT 
+                   ppStmt
                    nil)]
       (if (sqlite-ok? code)
         (mem/deserialize-from ppStmt ::mem/pointer)

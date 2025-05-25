@@ -23,7 +23,7 @@
 
 (defn prepare-cached [{:keys [pdb stmt-cache]} [sql & params]]
   (let [stmt (cache/lookup-or-miss stmt-cache sql
-               (fn [sql] (api/prepare-v2 pdb sql)))]
+               (fn [sql] (api/prepare-v3 pdb sql)))]
     (bind-params stmt params)
     stmt))
 
@@ -74,7 +74,7 @@
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
         conn            {:pdb        *pdb
                          :stmt-cache statement-cache}]
-    (q* (api/prepare-v2 *pdb (pragma->set-pragma-query pragma)))
+    (q* (api/prepare-v3 *pdb (pragma->set-pragma-query pragma)))
     conn))
 
 (defn init-db!
