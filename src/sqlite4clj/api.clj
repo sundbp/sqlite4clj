@@ -1,19 +1,21 @@
 (ns sqlite4clj.api
   "These function map directly to SQLite's C API."
   (:require
+   [clojure.java.io :as io]
    [coffi.mem :as mem]
    [coffi.ffi :as ffi :refer [defcfn]]))
 
 ;; Load appropriate SQLite library
 (let [arch (System/getProperty "os.arch")]
-  (try
-    (ffi/load-library
-      ({"aarch64" "resources/sqlite3_aarch64.so"
-        "amd64"   "resources/sqlite3_amd64.so"
-        "x86_64"  "resources/sqlite3_amd64.so"}
-       arch))
-    (catch Throwable _
-      (ex-info "Architecture not supported" {:arch arch}))))
+    (try
+      (ffi/load-library
+        (io/resource
+          ({"aarch64" "sqlite3_aarch64.so"
+            "amd64"   "sqlite3_amd64.so"
+            "x86_64"  "sqlite3_amd64.so"}
+           arch)))
+      (catch Throwable _
+        (ex-info "Architecture not supported" {:arch arch}))))
 
 (defcfn initialize
   sqlite3_initialize
