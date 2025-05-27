@@ -59,7 +59,7 @@
                    nil)]
       (if (sqlite-ok? code)
         (mem/deserialize-from ppStmt ::mem/pointer)
-        (throw (ex-info "Failed to create preparde statement"
+        (throw (ex-info "Failed to create prepared statement"
                  {:stmt sql}))))))
 
 (defcfn reset

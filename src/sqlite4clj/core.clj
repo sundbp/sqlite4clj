@@ -31,7 +31,9 @@
   ;; This loop unrolling makes queries 25% faster
   (mapv
     (fn [n-cols]
-      `(fn [] ~(mapv (fn [n] `(api/column-text ~stmt ~n)) (range n-cols))))
+      (if (= n-cols 1)
+        `(fn [] (api/column-text ~stmt 0)) ;; single column in unwrapped
+        `(fn [] ~(mapv (fn [n] `(api/column-text ~stmt ~n)) (range n-cols)))))
     (range (inc max-cols))))
 
 (defn column-vals-fn [stmt]
