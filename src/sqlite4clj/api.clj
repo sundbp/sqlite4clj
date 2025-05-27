@@ -7,15 +7,15 @@
 
 ;; Load appropriate SQLite library
 (let [arch (System/getProperty "os.arch")]
-    (try
-      (ffi/load-library
-        (io/resource
-          ({"aarch64" "sqlite3_aarch64.so"
-            "amd64"   "sqlite3_amd64.so"
-            "x86_64"  "sqlite3_amd64.so"}
-           arch)))
-      (catch Throwable _
-        (ex-info "Architecture not supported" {:arch arch}))))
+  (try
+    (-> ({"aarch64" "sqlite3_aarch64.so"
+          "amd64"   "sqlite3_amd64.so"
+          "x86_64"  "sqlite3_amd64.so"}
+         arch)
+      io/resource
+      ffi/load-library)
+    (catch Throwable _
+      (ex-info "Architecture not supported" {:arch arch}))))
 
 (defcfn initialize
   sqlite3_initialize
