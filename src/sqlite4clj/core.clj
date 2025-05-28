@@ -45,18 +45,25 @@
     (when bind-fn (bind-fn stmt params))
     m))
 
+(defmacro with-stmt-reset
+  {:clj-kondo/lint-as 'clojure.core/with-open}
+  [[stmt-binding stmt] & body]
+  `(let [~stmt-binding ~stmt]
+     (try
+       ~@body
+       (finally
+         (api/reset ~stmt-binding)
+         (api/clear-bindings ~stmt-binding)))))
+
 (defn- q* [conn query]
-  (let [{:keys [stmt col-fn]}
-        (prepare-cached conn query)
-        rs (loop [rows (transient [])]
-             (let [code (int (api/step stmt))]
-               (case code
-                 100 (recur (conj! rows (col-fn stmt)))
-                 101 (persistent! rows)
-                 {:error code})))]
-    (api/reset stmt)
-    (api/clear-bindings stmt)
-    rs))
+  (let [{:keys [stmt col-fn]} (prepare-cached conn query)]
+    (with-stmt-reset [stmt stmt]
+      (loop [rows (transient [])]
+        (let [code (int (api/step stmt))]
+          (case code
+            100 (recur (conj! rows (col-fn stmt)))
+            101 (persistent! rows)
+            {:error code}))))))
 
 (def default-pramga
   {:cache_size   15625
