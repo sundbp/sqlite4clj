@@ -50,10 +50,10 @@
         (prepare-cached conn query)
         rs (loop [rows (transient [])]
              (let [code (int (api/step stmt))]
-                                  (case code
-                                    100 (recur (conj! rows (col-fn stmt)))
-                                    101 (persistent! rows)
-                                    {:error code})))]
+               (case code
+                 100 (recur (conj! rows (col-fn stmt)))
+                 101 (persistent! rows)
+                 {:error code})))]
     (api/reset stmt)
     (api/clear-bindings stmt)
     rs))
