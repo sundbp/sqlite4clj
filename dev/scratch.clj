@@ -30,7 +30,6 @@
 
   (->>
     (d/q db ["PRAGMA compile_options;"])
-    (map first)
     (filter #(re-find #"MAX_" %)))
   
 
@@ -39,8 +38,7 @@
     (d/q tx ["pragma foreign_keys;"]))
 
   (d/q db ["some malformed sqlite"])
-
-  ;; This cause hard crash
+  
   (d/q db ["pragma wal;" "pragma wal;"])
 
   (time
@@ -48,12 +46,6 @@
                   1978 3955 5932 1979 3956 5933 1980 3957 5934])
       (mapv
         (fn [[chunk-id state]] {:chunk-id chunk-id :state state}))))
-
-
-  ;; This causes segfault
-  (d/q db ["INSERT INTO session (id, checks) VALUES (?, ?)"
-           "foo"
-           1])
 
   (d/q db ["INSERT INTO session (id, checks) VALUES ('foo', 1)"])
 
@@ -71,7 +63,7 @@
            (fn [n]
              (future
                (do
-                 (d/q db ["SELECT chunk_id, state FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                 (d/q db ["SELECT chunk_id FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
                           (+ n 1978)
                           (+ n 3955)
                           (+ n 5932)
@@ -88,9 +80,16 @@
   (user/bench
     ;; Execution time mean : 455.139383 µs
     ;; Execution time mean : 345.804480 µs
+    ;; Execution time mean : 187.652161 µs
     (d/q db
       ["SELECT chunk_id, state FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
        1978 3955 5932 1979 3956 5933 1980 3957 5934]))
+
+  (user/bench
+    (->> ;; Execution time mean : 131.101111 µs
+      (d/q db
+        ["SELECT chunk_id FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         1978 3955 5932 1979 3956 5933 1980 3957 5934])))
 
   (user/bench
     (->> (d/q db

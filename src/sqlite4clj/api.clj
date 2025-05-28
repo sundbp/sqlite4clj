@@ -15,13 +15,30 @@
       io/resource
       ffi/load-library)
     (catch Throwable _
-      (ex-info "Architecture not supported" {:arch arch}))))
+      (ex-info (str "Architecture not supported: " arch)
+        {:arch arch}))))
 
 (defcfn initialize
   sqlite3_initialize
   [::mem/pointer] ::mem/int)
 
 (defonce init-lib (initialize nil))
+
+(defcfn errmsg
+  sqlite3_errmsg
+  [::mem/pointer] ::mem/c-string)
+
+(defcfn errstr
+  sqlite3_errstr
+  [::mem/int] ::mem/c-string)
+
+(defn sqlite-ex-info [pdb code data]
+  (let [code-name (errstr code)
+        message   (errmsg pdb)]
+    (ex-info (str "SQLite error: " code-name "\n" message)
+      (assoc data
+        :code code-name
+        :message message))))
 
 (defn sqlite-ok? [code]
   (= code 0))
@@ -32,12 +49,11 @@
   sqlite3-open-native
   [filename flags]
   (with-open [arena (mem/confined-arena)]
-    (let [pdb    (mem/alloc-instance ::mem/pointer arena)
-          result (sqlite3-open-native filename pdb flags nil)]
-      (if (sqlite-ok? result)
+    (let [pdb  (mem/alloc-instance ::mem/pointer arena)
+          code (sqlite3-open-native filename pdb flags nil)]
+      (if (sqlite-ok? code)
         (mem/deserialize-from pdb ::mem/pointer)
-        (throw (ex-info "Failed to open sqlite3 database"
-                 {:filename filename}))))))
+        (throw (sqlite-ex-info pdb code {:filename filename}))))))
 
 (defcfn close
   sqlite3_close
@@ -54,13 +70,12 @@
     (let [ppStmt (mem/alloc-instance ::mem/pointer arena)
           sql    (String/new (String/.getBytes sql "UTF-8") "UTF-8")
           code   (sqlite3-prepare-native pdb sql -1
-                   0x01 ;; SQLITE_PREPARE_PERSISTENT 
+                   0x01 ;; SQLITE_PREPARE_PERSISTENT
                    ppStmt
                    nil)]
       (if (sqlite-ok? code)
         (mem/deserialize-from ppStmt ::mem/pointer)
-        (throw (ex-info "Failed to create prepared statement"
-                 {:stmt sql}))))))
+        (throw (sqlite-ex-info pdb code {:sql sql}))))))
 
 (defcfn reset
   sqlite3_reset
@@ -121,5 +136,3 @@
 (defcfn column-type
   sqlite3_column_type
   [::mem/pointer ::mem/int] ::mem/int)
-
-

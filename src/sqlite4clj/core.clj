@@ -15,7 +15,7 @@
     :else            `api/bind-text))
 
 (defmacro build-bind-fn [first-run-params]
-  (let [stmt      (gensym)
+  (let [stmt   (gensym)
         params (gensym)]
     `(fn [~stmt ~params]
        ~@(map-indexed
@@ -24,16 +24,30 @@
              `(~(type->sqlite3-bind param) ~stmt ~(inc i)
                (~params ~i))) first-run-params))))
 
-(defmacro build-column-fn [n-cols]
+(defn col-type->col-fn [sqlite-type]
+  (case sqlite-type
+    (1 5) `api/column-int
+    (4)   `api/column-double
+    `api/column-text))
+
+(defn get-column-types [stmt]
+  (let [n-cols (int (api/column-count stmt))]
+    (mapv (fn [n] (api/column-type stmt n)) (range 0 n-cols))))
+
+(defmacro build-column-fn [column-types]
   (let [stmt (gensym)]
-    `(fn [~stmt] ~(mapv (fn [n] `(api/column-text ~stmt ~n)) (range n-cols)))))
+    `(fn [~stmt]
+       ~(if (= (count column-types) 1)
+          ;; Unwrap when returning single column
+          `(~(col-type->col-fn (first column-types)) ~stmt 0)
+          (vec (map-indexed
+                 (fn [i n] `(~(col-type->col-fn n) ~stmt ~i))
+                 column-types))))))
 
 (defn prepare
   ([pdb sql params]
-   (let [stmt   (api/prepare-v3 pdb sql)
-         n-cols (api/column-count stmt)]
-     (cond-> {:stmt   stmt
-              :col-fn (eval `(build-column-fn ~n-cols))}
+   (let [stmt (api/prepare-v3 pdb sql)]
+     (cond-> {:stmt stmt}
        (seq params) (assoc :bind-fn (eval `(build-bind-fn ~params)))))))
 
 (defn prepare-cached [{:keys [pdb stmt-cache]} query]
@@ -63,10 +77,29 @@
         101 (persistent! rows)
         code))))
 
-(defn- q* [conn query]
+(defn- execute-q [conn [sql :as query]]
   (let [{:keys [stmt col-fn]} (prepare-cached conn query)]
     (with-stmt-reset [stmt stmt]
-      (step-rows stmt col-fn []))))
+      (if col-fn
+        (step-rows stmt col-fn [])
+        (let [stmt-cache (:stmt-cache conn)
+              code       (int (api/step stmt))]
+          (if (= 100 code)
+            (let [col-types (get-column-types stmt)
+                  col-fn    (eval `(build-column-fn ~col-types))]
+              (swap! stmt-cache assoc-in [sql :col-fn] col-fn)
+              (step-rows stmt col-fn [(col-fn stmt)]))
+            (do (swap! stmt-cache assoc-in [sql :col-fn] (fn noop [_]))
+                code)))))))
+
+(defn q* [conn query]
+  (let [result (execute-q conn query)]
+    (cond
+      (vector? result) result
+      (= result 101)   []
+      :else            (throw (api/sqlite-ex-info (:pdb conn) result
+                                {:sql    (first query)
+                                 :params (subvec query 1)})))))
 
 (def default-pramga
   {:cache_size   15625
@@ -141,8 +174,5 @@
 ;; WAL + single writer enforced at the application layer means you don't need
 ;; to handle SQLITE_BUSY or SQLITE_LOCKED.
 
-;; TODO: errors
-;; TODO: response type
-;; TODO: faster response build
 ;; TODO: finalise prepared statements when shutting down
 
