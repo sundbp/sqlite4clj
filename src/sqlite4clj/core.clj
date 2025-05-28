@@ -25,7 +25,7 @@
                (~params ~i))) first-run-params))))
 
 (defn col-type->col-fn [sqlite-type]
-  (case sqlite-type
+  (case (int sqlite-type)
     (1 5) `api/column-int
     (4)   `api/column-double
     `api/column-text))
