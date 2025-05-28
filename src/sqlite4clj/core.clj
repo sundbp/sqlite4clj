@@ -45,13 +45,15 @@
     (when bind-fn (bind-fn stmt params))
     m))
 
-(defn- q* [{:keys [stmt col-fn]}]
-  (let [rs (loop [rows (transient [])]
+(defn- q* [conn query]
+  (let [{:keys [stmt col-fn]}
+        (prepare-cached conn query)
+        rs (loop [rows (transient [])]
              (let [code (int (api/step stmt))]
-               (case code
-                 100 (recur (conj! rows (col-fn stmt)))
-                 101 (persistent! rows)
-                 {:error code})))]
+                                  (case code
+                                    100 (recur (conj! rows (col-fn stmt)))
+                                    101 (persistent! rows)
+                                    {:error code})))]
     (api/reset stmt)
     (api/clear-bindings stmt)
     rs))
@@ -79,7 +81,7 @@
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
         conn            {:pdb        *pdb
                          :stmt-cache statement-cache}]
-    (q* (prepare *pdb (pragma->set-pragma-query pragma) nil))
+    (q* conn [(pragma->set-pragma-query pragma)])
     conn))
 
 (defn init-db!
@@ -95,13 +97,12 @@
 
 (defn q [{:keys [conn-pool] :as tx} query]
   (if conn-pool
-    (let [conn (BlockingQueue/.take conn-pool)
-          stmt (prepare-cached conn query)]
+    (let [conn (BlockingQueue/.take conn-pool)]
       (try
-        (q* stmt)
+        (q* conn query)
         (finally (BlockingQueue/.offer conn-pool conn))))
     ;; If we don't have a connection pool then we have a tx.
-    (q* (prepare-cached tx query))))
+    (q* tx query)))
 
 (defmacro with-read-tx
   {:clj-kondo/lint-as 'clojure.core/with-open}
