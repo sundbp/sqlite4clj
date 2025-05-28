@@ -55,15 +55,18 @@
          (api/reset ~stmt-binding)
          (api/clear-bindings ~stmt-binding)))))
 
+(defn step-rows [stmt col-fn rows]
+  (loop [rows (transient rows)]
+    (let [code (int (api/step stmt))]
+      (case code
+        100 (recur (conj! rows (col-fn stmt)))
+        101 (persistent! rows)
+        code))))
+
 (defn- q* [conn query]
   (let [{:keys [stmt col-fn]} (prepare-cached conn query)]
     (with-stmt-reset [stmt stmt]
-      (loop [rows (transient [])]
-        (let [code (int (api/step stmt))]
-          (case code
-            100 (recur (conj! rows (col-fn stmt)))
-            101 (persistent! rows)
-            {:error code}))))))
+      (step-rows stmt col-fn []))))
 
 (def default-pramga
   {:cache_size   15625
