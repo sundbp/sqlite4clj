@@ -102,8 +102,24 @@
   sqlite3_column_count
   [::mem/pointer] ::mem/int)
 
+(defcfn column-double 
+  sqlite3_column_double
+  [::mem/pointer ::mem/int] ::mem/double)
+
+(defcfn column-int 
+  sqlite3_column_int
+  [::mem/pointer ::mem/int] ::mem/int)
+
 (defcfn column-text
   sqlite3_column_text
   [::mem/pointer ::mem/int] ::mem/c-string)
+
+(defcfn column-bytes
+  sqlite3_column_bytes
+  [::mem/pointer ::mem/int] ::mem/int)
+
+(defcfn column-type
+  sqlite3_column_type
+  [::mem/pointer ::mem/int] ::mem/int)
 
 

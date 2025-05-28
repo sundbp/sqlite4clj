@@ -10,45 +10,48 @@
 
 (defn type->sqlite3-bind [param]
   (cond
-    (integer? param) api/bind-int
-    (double? param)  api/bind-double
-    :else            api/bind-text))
+    (integer? param) `api/bind-int
+    (double? param)  `api/bind-double
+    :else            `api/bind-text))
 
-(defn bind-params [stmt params]
-  (doall
-    (map-indexed
-      (fn [i param]
-        ;; starts at 1
-        ((type->sqlite3-bind param) stmt (inc i) param)) params)))
+(defmacro build-bind-fn [first-run-params]
+  (let [stmt      (gensym)
+        params (gensym)]
+    `(fn [~stmt ~params]
+       ~@(map-indexed
+           (fn [i param]
+             ;; starts at 1
+             `(~(type->sqlite3-bind param) ~stmt ~(inc i)
+               (~params ~i))) first-run-params))))
 
-(defn prepare-cached [{:keys [pdb stmt-cache]} [sql & params]]
-  (let [stmt (cache/lookup-or-miss stmt-cache sql
-               (fn [sql] (api/prepare-v3 pdb sql)))]
-    (bind-params stmt params)
-    stmt))
+(defmacro build-column-fn [n-cols]
+  (let [stmt (gensym)]
+    `(fn [~stmt] ~(mapv (fn [n] `(api/column-text ~stmt ~n)) (range n-cols)))))
 
-(defmacro n-cols->column-fn [stmt max-cols]
-  ;; This loop unrolling makes queries 25% faster
-  (mapv
-    (fn [n-cols]
-      (if (= n-cols 1)
-        `(fn [] (api/column-text ~stmt 0)) ;; single column in unwrapped
-        `(fn [] ~(mapv (fn [n] `(api/column-text ~stmt ~n)) (range n-cols)))))
-    (range (inc max-cols))))
+(defn prepare
+  ([pdb sql params]
+   (let [stmt   (api/prepare-v3 pdb sql)
+         n-cols (api/column-count stmt)]
+     (cond-> {:stmt   stmt
+              :col-fn (eval `(build-column-fn ~n-cols))}
+       (seq params) (assoc :bind-fn (eval `(build-bind-fn ~params)))))))
 
-(defn column-vals-fn [stmt]
-  (let [n-cols (api/column-count stmt)]
-    (get (n-cols->column-fn stmt 10)
-      n-cols)))
+(defn prepare-cached [{:keys [pdb stmt-cache]} query]
+  (let [sql    (first query)
+        params (subvec query 1)
+        {:keys [stmt bind-fn] :as m}
+        (cache/lookup-or-miss stmt-cache sql
+          (fn [_] (prepare pdb sql params)))]
+    (when bind-fn (bind-fn stmt params))
+    m))
 
-(defn- q* [stmt]
-  (let [c-fn (column-vals-fn stmt)
-        rs   (loop [rows (transient [])]
-               (let [code (int (api/step stmt))]
-                 (case code
-                   100 (recur (conj! rows (c-fn)))
-                   101 (persistent! rows)
-                   {:error code})))]
+(defn- q* [{:keys [stmt col-fn]}]
+  (let [rs (loop [rows (transient [])]
+             (let [code (int (api/step stmt))]
+               (case code
+                 100 (recur (conj! rows (col-fn stmt)))
+                 101 (persistent! rows)
+                 {:error code})))]
     (api/reset stmt)
     (api/clear-bindings stmt)
     rs))
@@ -76,7 +79,7 @@
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
         conn            {:pdb        *pdb
                          :stmt-cache statement-cache}]
-    (q* (api/prepare-v3 *pdb (pragma->set-pragma-query pragma)))
+    (q* (prepare *pdb (pragma->set-pragma-query pragma) nil))
     conn))
 
 (defn init-db!
