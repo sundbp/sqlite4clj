@@ -17,7 +17,7 @@ Currently, this project is very much a proof of concept. But, I'm hoping to ulti
 ## Building SQLite from source
 
 ```
-gcc -shared -fPIC -DSQLITE_DQS=0 \
+gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
    -DSQLITE_THREADSAFE=2 \
    -DSQLITE_DEFAULT_MEMSTATUS=0 \
    -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
