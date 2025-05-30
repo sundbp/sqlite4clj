@@ -143,6 +143,7 @@
     (let [conn (BlockingQueue/.take conn-pool)]
       (try
         (q* conn query)
+        ;; Always return the conn even on error
         (finally (BlockingQueue/.offer conn-pool conn))))
     ;; If we don't have a connection pool then we have a tx.
     (q* tx query)))
