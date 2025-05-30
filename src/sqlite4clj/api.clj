@@ -13,12 +13,12 @@
     (io/copy in out)))
 
 ;; Load appropriate SQLite library
-(let [temp-lib-filename "sqlite4clj_temp_sqlite3_lib.so"
-      arch          (System/getProperty "os.arch")
-      res-file      ({"aarch64" "sqlite3_aarch64.so"
-                      "amd64"   "sqlite3_amd64.so"
-                      "x86_64"  "sqlite3_amd64.so"}
-                     arch)]
+(let [arch              (System/getProperty "os.arch")
+      res-file          ({"aarch64" "sqlite3_aarch64.so"
+                          "amd64"   "sqlite3_amd64.so"
+                          "x86_64"  "sqlite3_amd64.so"}
+                     arch)
+      temp-lib-filename (str "sqlite4clj_temp_" res-file)]
   (copy-resource res-file temp-lib-filename)
   (ffi/load-library temp-lib-filename)
   ;; We delete once loaded

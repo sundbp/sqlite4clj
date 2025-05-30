@@ -16,10 +16,8 @@ Currently, this project is very much a proof of concept. But, I'm hoping to ulti
 
 ## Building SQLite from source
 
-See this [blog post](https://andersmurphy.com/2023/07/09/sqlite-building-from-source-on-macos.html) .
-
 ```
-gcc -Os -I. -DSQLITE_DQS=0 \
+gcc -shared -fPIC -DSQLITE_DQS=0 \
    -DSQLITE_THREADSAFE=2 \
    -DSQLITE_DEFAULT_MEMSTATUS=0 \
    -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
@@ -34,7 +32,7 @@ gcc -Os -I. -DSQLITE_DQS=0 \
    -DSQLITE_OMIT_AUTOINIT \
    -DSQLITE_DISABLE_PAGECACHE_OVERFLOW_STATS \
    -DSQLITE_ENABLE_STAT4 \
-   shell.c sqlite3.c -lpthread -ldl -lm -o sqlite3
+   sqlite3.c -lpthread -ldl -lm -o sqlite3.so
 ```
 
 
