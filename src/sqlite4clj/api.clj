@@ -2,21 +2,27 @@
   "These function map directly to SQLite's C API."
   (:require
    [clojure.java.io :as io]
-   [coffi.mem :as mem]
-   [coffi.ffi :as ffi :refer [defcfn]]))
+   [coffi.ffi :as ffi :refer [defcfn]]
+   [coffi.mem :as mem]) 
+  (:import
+   [java.nio.file Files]))
+
+(defn copy-resource [resource-path output-path]
+  (with-open [in  (io/input-stream (io/resource resource-path))
+              out (io/output-stream (io/file output-path))]
+    (io/copy in out)))
 
 ;; Load appropriate SQLite library
-(let [arch (System/getProperty "os.arch")]
-  (try
-    (-> ({"aarch64" "sqlite3_aarch64.so"
-          "amd64"   "sqlite3_amd64.so"
-          "x86_64"  "sqlite3_amd64.so"}
-         arch)
-      io/resource
-      ffi/load-library)
-    (catch Throwable _
-      (ex-info (str "Architecture not supported: " arch)
-        {:arch arch}))))
+(let [temp-lib-filename "sqlite4clj_temp_sqlite3_lib.so"
+      arch          (System/getProperty "os.arch")
+      res-file      ({"aarch64" "sqlite3_aarch64.so"
+                      "amd64"   "sqlite3_amd64.so"
+                      "x86_64"  "sqlite3_amd64.so"}
+                     arch)]
+  (copy-resource res-file temp-lib-filename)
+  (ffi/load-library temp-lib-filename)
+  ;; We delete once loaded
+  (Files/deleteIfExists (.toPath (io/file temp-lib-filename))))
 
 (defcfn initialize
   sqlite3_initialize
