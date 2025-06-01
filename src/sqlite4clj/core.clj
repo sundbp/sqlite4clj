@@ -101,7 +101,7 @@
                                 {:sql    (first query)
                                  :params (subvec query 1)})))))
 
-(def default-pramga
+(def default-pragma
   {:cache_size   15625
    :page_size    4096
    :journal_mode "WAL"
@@ -110,7 +110,7 @@
    :foreign_keys true})
 
 (defn pragma->set-pragma-query [pragma]
-  (->> (merge default-pramga pragma)
+  (->> (merge default-pragma pragma)
     (map (fn [[k v]] (str "pragma " (name k) "=" v ";")))
     str/join))
 
@@ -154,10 +154,10 @@
   `(let [conn-pool# (:conn-pool ~db)
          ~tx        (BlockingQueue/.take conn-pool#)]
      (try
-       (q ~tx ["BEGIN DEFERRED;"])
+       (q ~tx ["BEGIN DEFERRED"])
        ~@body
        (finally
-         (q ~tx ["COMMIT;"])
+         (q ~tx ["COMMIT"])
          (BlockingQueue/.offer conn-pool# ~tx)))))
 
 (defmacro with-write-tx
@@ -166,10 +166,10 @@
   `(let [conn-pool# (:conn-pool ~db)
          ~tx        (BlockingQueue/.take conn-pool#)]
      (try
-       (q ~tx ["BEGIN IMMEDIATE;"])
+       (q ~tx ["BEGIN IMMEDIATE"])
        ~@body
        (finally
-         (q ~tx ["COMMIT;"])
+         (q ~tx ["COMMIT"])
          (BlockingQueue/.offer conn-pool# ~tx)))))
 
 ;; WAL + single writer enforced at the application layer means you don't need
