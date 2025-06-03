@@ -144,3 +144,7 @@
 (defcfn column-type
   sqlite3_column_type
   [::mem/pointer ::mem/int] ::mem/int)
+
+(defcfn finalize
+  sqlite3_finalize
+  [::mem/pointer] ::mem/int)
