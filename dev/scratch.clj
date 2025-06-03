@@ -120,3 +120,22 @@
     ["INSERT INTO session (id, checks) VALUES (?, ?)" "stro" 1]))
 
   )
+
+(comment
+  (def sid "someid")
+
+  (defn test-case [db sid]
+    (let [[checks] (d/q db ["SELECT checks FROM session WHERE id = ?" sid])]
+      (if checks
+        (d/q db ["UPDATE session SET checks = ? WHERE id = ?" checks sid])
+        (d/q db ["INSERT INTO session (id, checks) VALUES (?, ?)" sid 1]))))
+
+  (do
+    (test-case write-db sid)
+    (test-case write-db sid)
+    (d/q write-db ["SELECT checks FROM session WHERE id = ?" sid]))
+
+  (d/with-write-tx [tx write-db]
+    (test-case tx sid)
+    (test-case tx sid)
+    (d/q tx ["SELECT checks FROM session WHERE id = ?" sid])))
