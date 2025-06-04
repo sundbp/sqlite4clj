@@ -77,22 +77,20 @@
         101 (persistent! rows)
         code))))
 
-(defn- execute-q [conn [sql :as query]]
-  (let [{:keys [stmt col-fn]} (prepare-cached conn query)]
-    (with-stmt-reset [stmt stmt]
-      (if col-fn
-        (step-rows stmt col-fn [])
-        (let [stmt-cache (:stmt-cache conn)
-              code       (int (api/step stmt))]
-          (if (= 100 code)
-            (let [col-types (get-column-types stmt)
-                  col-fn    (eval `(build-column-fn ~col-types))]
-              (swap! stmt-cache assoc-in [sql :col-fn] col-fn)
-              (step-rows stmt col-fn [(col-fn stmt)]))
-            code))))))
-
-(defn q* [conn query]
-  (let [result (execute-q conn query)]
+(defn- q* [conn [sql :as query]]
+  (let [result
+        (let [{:keys [stmt col-fn]} (prepare-cached conn query)]
+          (with-stmt-reset [stmt stmt]
+            (if col-fn
+              (step-rows stmt col-fn [])
+              (let [stmt-cache (:stmt-cache conn)
+                    code       (int (api/step stmt))]
+                (if (= 100 code)
+                  (let [col-types (get-column-types stmt)
+                        col-fn    (eval `(build-column-fn ~col-types))]
+                    (swap! stmt-cache assoc-in [sql :col-fn] col-fn)
+                    (step-rows stmt col-fn [(col-fn stmt)]))
+                  code)))))]
     (cond
       (vector? result) result
       (= result 101)   []
@@ -130,7 +128,7 @@
     (q* conn [(pragma->set-pragma-query pragma)])
     conn))
 
-(defn init-db!
+(defn init-pool!
   [db-name & [{:keys [pool-size pragma read-only]
                :or   {pool-size 4}}]]
   (let [conns (repeatedly pool-size
@@ -140,6 +138,24 @@
     {:conn-pool pool
      :close
      (fn [] (run! (fn [conn] (api/close (:pdb conn))) conns))}))
+
+(defn init-db!
+  "A db consists of a read pool of size :pool-size and a write pool of size 1.
+  The same pragma are set for both pools."
+  [url & [{:keys [pool-size pragma] :or {pool-size 4}}]]
+  (let [;; Only one write connection
+        writer
+        (init-pool! url
+          {:pool-size 1
+           :pragma    pragma})
+        ;; Pool of read connections
+        reader
+        (init-pool! url
+          {:read-only true
+           :pool-size pool-size
+           :pragma    pragma})]
+    {:writer writer
+     :reader reader}))
 
 (defn q [{:keys [conn-pool] :as tx} query]
   (if conn-pool
