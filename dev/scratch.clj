@@ -135,3 +135,22 @@
     (test-case tx sid)
     (test-case tx sid)
     (d/q tx ["SELECT checks FROM session WHERE id = ?" sid])))
+
+
+(comment
+  (d/q writer
+    ["CREATE TABLE IF NOT EXISTS blobby(id TEXT PRIMARY KEY, data BLOB) WITHOUT ROWID"])
+  
+  (d/q writer
+    ["INSERT INTO blobby (id, data) VALUES (?, ?)"
+     "blob-test1"
+     (String/.getBytes "hello there")])
+
+  (String/.getBytes "blob-test1")
+
+  (count (String/.getBytes "hello there" "UTF-8"))
+
+  (d/q reader ["SELECT id, data FROM blobby WHERE id = ?" "blob-test1"])
+  (d/q reader ["SELECT id FROM blobby WHERE id = ?" "blob-test1"])
+
+  )

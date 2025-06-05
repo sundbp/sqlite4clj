@@ -12,6 +12,7 @@
   (cond
     (integer? param) `api/bind-int
     (double? param)  `api/bind-double
+    (bytes? param)   `api/bind-blob
     :else            `api/bind-text))
 
 (defmacro build-bind-fn [first-run-params]
@@ -25,10 +26,12 @@
                (~params ~i))) first-run-params))))
 
 (defn col-type->col-fn [sqlite-type]
+  ;; See type codes here: https://sqlite.org/c3ref/c_blob.html
   (case (int sqlite-type)
-    (1 5) `api/column-int
-    (4)   `api/column-double
-    `api/column-text))
+    1 `api/column-int
+    2 `api/column-double
+    3 `api/column-text
+    4 `api/column-blob))
 
 (defn get-column-types [stmt]
   (let [n-cols (int (api/column-count stmt))]

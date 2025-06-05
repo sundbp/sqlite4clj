@@ -117,6 +117,18 @@
       (count text-bytes)
       sqlite-transient)))
 
+(defcfn bind-blob
+  "sqlite3_bind_blob"
+  [::mem/pointer ::mem/int ::mem/pointer ::mem/int
+   ::mem/pointer] ::mem/int
+  sqlite3-bind-blob-native
+  [pdb idx blob]
+  (let [blob-l (count blob)]
+    (sqlite3-bind-blob-native pdb idx
+      (mem/serialize blob [::mem/array ::mem/byte blob-l])
+      blob-l
+      sqlite-transient)))
+
 (defcfn step
   sqlite3_step
   [::mem/pointer] ::mem/int)
@@ -140,6 +152,18 @@
 (defcfn column-bytes
   sqlite3_column_bytes
   [::mem/pointer ::mem/int] ::mem/int)
+
+(defcfn column-blob
+  "sqlite3_column_blob"
+  [::mem/pointer ::mem/int] ::mem/pointer
+  sqlite3_column_blob-native
+  [stmt idx]
+  (let [result (sqlite3_column_blob-native stmt idx)
+        size   (column-bytes stmt idx)]
+    (mem/deserialize-from
+      (mem/reinterpret result
+        (mem/size-of [::mem/array ::mem/byte size]))
+      [::mem/array ::mem/byte size])))
 
 (defcfn column-type
   sqlite3_column_type
