@@ -160,10 +160,9 @@
   [stmt idx]
   (let [result (sqlite3_column_blob-native stmt idx)
         size   (column-bytes stmt idx)]
-    (mem/deserialize-from
-      (mem/reinterpret result
-        (mem/size-of [::mem/array ::mem/byte size]))
-      [::mem/array ::mem/byte size])))
+    (.toArray (mem/reinterpret result
+                (mem/size-of [::mem/array ::mem/byte size]))
+      java.lang.foreign.ValueLayout/JAVA_BYTE)))
 
 (defcfn column-type
   sqlite3_column_type

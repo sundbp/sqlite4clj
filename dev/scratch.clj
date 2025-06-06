@@ -143,14 +143,14 @@
   
   (d/q writer
     ["INSERT INTO blobby (id, data) VALUES (?, ?)"
-     "blob-test1"
+     "blob-test2"
      (String/.getBytes "hello there")])
 
   (String/.getBytes "blob-test1")
 
   (count (String/.getBytes "hello there" "UTF-8"))
 
-  (d/q reader ["SELECT id, data FROM blobby WHERE id = ?" "blob-test1"])
+  (type (first (d/q reader ["SELECT data FROM blobby WHERE id = ?" "blob-test2"])))
   (d/q reader ["SELECT id FROM blobby WHERE id = ?" "blob-test1"])
 
   )
