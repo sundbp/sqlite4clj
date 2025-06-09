@@ -136,7 +136,6 @@
     (test-case tx sid)
     (d/q tx ["SELECT checks FROM session WHERE id = ?" sid])))
 
-
 (comment
   (d/q writer
     ["CREATE TABLE IF NOT EXISTS blobby(id TEXT PRIMARY KEY, data BLOB) WITHOUT ROWID"])
