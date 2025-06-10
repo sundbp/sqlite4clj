@@ -107,12 +107,15 @@
    :journal_mode "WAL"
    :synchronous  "NORMAL"
    :temp_store   "MEMORY"
-   :foreign_keys true})
+   :foreign_keys true
+   ;; Because of WAL and a single writer at the application level
+   ;; SQLITE_BUSY error should almost never happen, see:
+   ;; https://sqlite.org/wal.html#sometimes_queries_return_sqlite_busy_in_wal_mode
+   :busy_timeout 100 })
 
 (defn pragma->set-pragma-query [pragma]
   (->> (merge default-pragma pragma)
-    (map (fn [[k v]] (str "pragma " (name k) "=" v)))
-    (str/join ";")))
+    (mapv (fn [[k v]] [(str "pragma " (name k) "=" v)]))))
 
 (defn new-conn! [db-name pragma read-only]
   (let [flags           (if read-only
@@ -124,7 +127,8 @@
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
         conn            {:pdb        *pdb
                          :stmt-cache statement-cache}]
-    (q* conn [(pragma->set-pragma-query pragma)])
+    (->> (pragma->set-pragma-query pragma)
+      (run! #(q* conn %)))
     conn))
 
 (defn init-pool!
