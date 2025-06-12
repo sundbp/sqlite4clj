@@ -97,8 +97,13 @@
     (d/q reader
       ["SELECT chunk_id, JSON_GROUP_ARRAY(state) AS chunk_cells FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)  GROUP BY chunk_id" 1978 3955 5932 1979 3956 5933 1980 3957 5934]))
 
-  (d/q writer ["vacuum"])
-  (d/q writer ["optimize"])
+  (d/q reader ["pragma query_only"])
+  (d/q writer ["pragma query_only"])
+
+  (count (:conn-pool reader))
+
+  (d/optimize-db reader)
+  (d/optimize-db writer)
 
   "134"
 

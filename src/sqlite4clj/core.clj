@@ -3,7 +3,6 @@
   and prepared statement caching."
   (:require
    [sqlite4clj.api :as api]
-   [clojure.string :as str]
    [clojure.core.cache.wrapped :as cache])
   (:import
    (java.util.concurrent BlockingQueue LinkedBlockingQueue)))
@@ -34,7 +33,9 @@
     4 `api/column-blob))
 
 (defn get-column-types [stmt]
-  (let [n-cols (int (api/column-count stmt))]
+  (let [n-cols (int
+                 #_{:clj-kondo/ignore [:type-mismatch]}
+                 (api/column-count stmt))]
     (mapv (fn [n] (api/column-type stmt n)) (range 0 n-cols))))
 
 (defmacro build-column-fn [column-types]
@@ -74,7 +75,9 @@
 
 (defn step-rows [stmt col-fn rows]
   (loop [rows (transient rows)]
-    (let [code (int (api/step stmt))]
+    (let [code (int
+                 #_{:clj-kondo/ignore [:type-mismatch]}
+                 (api/step stmt))]
       (case code
         100 (recur (conj! rows (col-fn stmt)))
         101 (persistent! rows)
@@ -87,7 +90,9 @@
             (if col-fn
               (step-rows stmt col-fn [])
               (let [stmt-cache (:stmt-cache conn)
-                    code       (int (api/step stmt))]
+                    code       (int
+                                 #_{:clj-kondo/ignore [:type-mismatch]}
+                                 (api/step stmt))]
                 (if (= 100 code)
                   (let [col-types (get-column-types stmt)
                         col-fn    (eval `(build-column-fn ~col-types))]
@@ -111,23 +116,25 @@
    ;; Because of WAL and a single writer at the application level
    ;; SQLITE_BUSY error should almost never happen, see:
    ;; https://sqlite.org/wal.html#sometimes_queries_return_sqlite_busy_in_wal_mode
-   :busy_timeout 100 })
+   :busy_timeout 100
+   ;; https://sqlite.org/pragma.html#pragma_optimize
+   :optimize     0x10002})
 
-(defn pragma->set-pragma-query [pragma]
-  (->> (merge default-pragma pragma)
-    (mapv (fn [[k v]] [(str "pragma " (name k) "=" v)]))))
+(defn pragma->set-pragma-query [pragma read-only]
+  (conj (->> (merge default-pragma pragma)
+          (mapv (fn [[k v]] [(str "pragma " (name k) "=" v)])))
+    ;; Needs to be added at the end after all pragma are run
+    ;; as optimise require connection not to be read only
+    [(str "pragma query_only=" (boolean read-only))]))
 
 (defn new-conn! [db-name pragma read-only]
-  (let [flags           (if read-only
-                          ;; SQLITE_OPEN_READONLY
-                          0x00000001
-                          ;; SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
-                          (bit-or 0x00000002 0x00000004))
+  (let [;; SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
+        flags           (bit-or 0x00000002 0x00000004)
         *pdb            (api/open-v2 db-name flags)
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
         conn            {:pdb        *pdb
                          :stmt-cache statement-cache}]
-    (->> (pragma->set-pragma-query pragma)
+    (->> (pragma->set-pragma-query pragma read-only)
       (run! #(q* conn %)))
     conn))
 
@@ -169,6 +176,19 @@
         (finally (BlockingQueue/.offer conn-pool conn))))
     ;; If we don't have a connection pool then we have a tx.
     (q* tx query)))
+
+(defn optimize-db
+  "Use for running optimise on long lived connections. For query_only
+  connections makes the connection temporarily writable."
+  [db]
+  (let [n-conn (count (:conn-pool db))]
+    (loop [n 0]
+      (if (= (first (q db ["pragma query_only"])) 1)
+        (do (q db ["pragma query_only=false"])
+            (q db ["pragma optimize"])
+            (q db ["pragma query_only=true"]))
+        (q db ["pragma optimize"]))
+      (if (> n-conn n) (recur (inc n)) n))))
 
 (defmacro with-read-tx
   {:clj-kondo/lint-as 'clojure.core/with-open}
