@@ -33,7 +33,7 @@ Initialise a db:
      :pragma    {:foreign_keys false}}))
 ```
 
- This creates a reader connection pool with a number of connections equal to `:pool-size` and a single writer connection. Single writer at the application level allows you to get the most out of SQLite's performance in addition to preventing `SQLITE_BUSY` and `SQLITE_LOCKED` messages. Finally, it makes it trivial to do transaction batching at the application layer for increased write throughput.
+ This creates a `:reader` connection pool with a number of connections equal to `:pool-size` and a single `:writer` connection. Single writer at the application level allows you to get the most out of SQLite's performance in addition to preventing `SQLITE_BUSY` and `SQLITE_LOCKED` messages. Finally, it makes it trivial to do transaction batching at the application layer for increased write throughput.
 
 Running a read query:
 
