@@ -20,7 +20,7 @@ andersmurphy/sqlite4clj
  :git/sha "1a82b2b425b22539f9cc17b4cbdd892676c2a9f9"}
 ```
 
-Initialise a db. This creates a reader connection pool with a number of connections equal to `:pool-size` and a single writer connection. Single writer at the application level allows you to get the most out of SQLite's performance in addition to preventing `SQLITE_BUSY` and `SQLITE_LOCKED` messages. Finally, it makes it trivial to do transaction batching at the application layer for increased write throughput.
+Initialise a db:
 
 ```clojure
 (ns scratch
@@ -32,6 +32,8 @@ Initialise a db. This creates a reader connection pool with a number of connecti
      :pool-size 4
      :pragma    {:foreign_keys false}}))
 ```
+
+ This creates a reader connection pool with a number of connections equal to `:pool-size` and a single writer connection. Single writer at the application level allows you to get the most out of SQLite's performance in addition to preventing `SQLITE_BUSY` and `SQLITE_LOCKED` messages. Finally, it makes it trivial to do transaction batching at the application layer for increased write throughput.
 
 Running a read query:
 
@@ -101,7 +103,7 @@ Read transactions:
 
 ## Why is this fast?
 
-The two main speedups are from caching query statements at a connection level and using macros for inline caching of column reading functions.
+The two main speedups are from caching query statements at a connection level and using inline caching of column reading functions.
 
 ## Further reading
 
