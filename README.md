@@ -12,7 +12,7 @@ Currently, this project is very much a proof of concept. But, I'm hoping to ulti
 
 ## Usage
 
-Currently this library is not on maven so you have to add it via git deps:
+Currently this library is not on maven so you have to add it via git deps (note: coffi requires at least Java 22):
 
 ```clojure
 andersmurphy/sqlite4clj 
@@ -101,6 +101,10 @@ Read transactions:
      (d/q tx ["SELECT checks FROM session WHERE id = ?" "user2"])))
 ```
 
+## Connection pools not thread pools
+
+The connection pools are not thread pools, they use a `LinkedBlockingQueue` to limit/queue access. Unlike thread pool this allows for having as many databases as you want without taking up large amount of memory particularly if you run your queries from virtual threads. With SQLite it's common to have many databases for isolation and convenience. It's not uncommon to have a database per tenant or user, or even simply as a persistent cache. So making this cheap is important as it's one of SQLite's super powers.
+
 ## Why is this fast?
 
 The two main speedups are from caching query statements at a connection level and using inline caching of column reading functions.
@@ -129,6 +133,3 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
    -DSQLITE_ENABLE_STAT4 \
    sqlite3.c -lpthread -ldl -lm -o sqlite3.so
 ```
-
-
-p
