@@ -2,13 +2,106 @@
 
 >⚠️ **WARNING:**  This project is highly experimental and not production ready.
 
->⚠️ **WARNING:**  API can change at any time! Use at your own risk. 
+>⚠️ **WARNING:**  API can change at any time! Use at your own risk.
 
 Conceptually sqlite4clj is inspired by sqlite4java a sqlite libaray that doesn't use the JDBC interface. The goal of sqlite4clj is to have a minimalist FFI binding to SQLite's C API using Java 22 FFI (project panama). Tighter integration with SQLite can in theory offer better performance and features not available through JDBC interfaces.
 
-By using [coffi](https://github.com/IGJoshua/coffi) to interface with SQLite's C API directly with FFI we bypass the need for: [sqlite-jdbc](https://github.com/xerial/sqlite-jdbc), [hikariCP](https://github.com/brettwooldridge/HikariCP) and [next.jdbc](https://github.com/seancorfield/next-jdbc). This massively reduces the amount of code that needs to be maintained, allows us to use Clojure to interface with SQLite directly. It also makes it easier to add SQLite specific features. In my case I was looking to cache prepared statement for each connection (which is not possible with HikariCP) but can lead to considerable performance gains on complex queries.
+By using [coffi](https://github.com/IGJoshua/coffi) to interface with SQLite's C API directly with FFI we bypass the need for: [sqlite-jdbc](https://github.com/xerial/sqlite-jdbc), [hikariCP](https://github.com/brettwooldridge/HikariCP) and [next.jdbc](https://github.com/seancorfield/next-jdbc). This massively reduces the amount of code that needs to be maintained (and a much smaller jar), allows us to use Clojure to interface with SQLite directly. It also makes it easier to add SQLite specific features. In my case I was looking to cache prepared statement for each connection (which is not possible with HikariCP) but can lead to considerable performance gains on complex queries.
 
 Currently, this project is very much a proof of concept. But, I'm hoping to ultimately make it production ready.
+
+## Usage
+
+Currently this library is not on maven so you have to add it via git deps:
+
+```clojure
+andersmurphy/sqlite4clj 
+{:git/url "https://github.com/andersmurphy/sqlite4clj"
+ :git/sha "1a82b2b425b22539f9cc17b4cbdd892676c2a9f9"}
+```
+
+Initialise a db. This creates a reader connection pool with a number of connections equal to `:pool-size` and a single writer connection. Single writer at the application level allows you to get the most out of SQLite's performance in addition to preventing `SQLITE_BUSY` and `SQLITE_LOCKED` messages. Finally, it makes it trivial to do transaction batching at the application layer for increased write throughput.
+
+```clojure
+(ns scratch
+  (:require [sqlite4clj.core :as d]))
+   
+(defonce db
+  (d/init-db! "database.db"
+    {:read-only true
+     :pool-size 4
+     :pragma    {:foreign_keys false}}))
+```
+
+Running a read query:
+
+```clojure
+(d/q (:reader db)
+  ["SELECT chunk_id, state FROM cell WHERE chunk_id = ?" 1978])
+
+=>
+[[1978 0]
+ [1978 0]
+ [1978 0]
+ [1978 0]
+ [1978 0]
+ [1978 0]
+ ...]
+```
+
+Unwrapped results when querying a single column:
+
+```clojure
+(d/q (:reader db)
+  ["SELECT chunk_id, state FROM cell WHERE chunk_id = ?" 1978])
+
+=>
+[1978
+ 1978
+ 1978
+ 1978
+ ...]
+
+```
+
+Inserting and updating:
+
+```clojure
+(d/q (:writer db)
+  ["INSERT INTO session (id, checks) VALUES (?, ?)" "user1" 1])
+
+=>
+[]
+
+(d/q (:writer db)
+  ["UPDATE session SET id = ?, checks = ? where id = ?"
+   "user1" 2 "user1"])
+=>
+[]
+```
+
+Write transactions:
+
+```clojure
+(d/with-write-tx [tx writer]
+  (let [sid "user1"
+        [checks] (d/q db ["SELECT checks FROM session WHERE id = ?" sid])]
+    (if checks
+      (d/q tx ["UPDATE session SET checks = ? WHERE id = ?" checks sid])
+      (d/q tx ["INSERT INTO session (id, checks) VALUES (?, ?)" sid 1]))))
+```
+
+Read transactions:
+
+```clojure
+(d/with-read-tx [tx writer]
+  (= (d/q tx ["SELECT checks FROM session WHERE id = ?" "user1"])
+     (d/q tx ["SELECT checks FROM session WHERE id = ?" "user2"])))
+```
+
+## Why is this fast?
+
+The two main speedups are from caching query statements at a connection level and using macros for inline caching of column reading functions.
 
 ## Further reading
 
@@ -36,3 +129,4 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
 ```
 
 
+p
