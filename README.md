@@ -8,6 +8,8 @@ Conceptually sqlite4clj is inspired by sqlite4java a sqlite libaray that doesn't
 
 By using [coffi](https://github.com/IGJoshua/coffi) to interface with SQLite's C API directly with FFI we bypass the need for: [sqlite-jdbc](https://github.com/xerial/sqlite-jdbc), [hikariCP](https://github.com/brettwooldridge/HikariCP) and [next.jdbc](https://github.com/seancorfield/next-jdbc). This massively reduces the amount of code that needs to be maintained (and a much smaller jar), allows us to use Clojure to interface with SQLite directly. It also makes it easier to add SQLite specific features. In my case I was looking to cache prepared statement for each connection (which is not possible with HikariCP) but can lead to considerable performance gains on complex queries.
 
+This also frees up scope for common things like binary encoding and decoding as well as compression decompression to leverage SQLite's blob type.
+
 Currently, this project is very much a proof of concept. But, I'm hoping to ultimately make it production ready.
 
 ## Usage

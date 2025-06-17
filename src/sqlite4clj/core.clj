@@ -3,9 +3,13 @@
   and prepared statement caching."
   (:require
    [sqlite4clj.api :as api]
-   [clojure.core.cache.wrapped :as cache])
+   [deed.core :as deed]
+   [clojure.core.cache.wrapped :as cache]
+   [clojure.java.io :as io])
   (:import
-   (java.util.concurrent BlockingQueue LinkedBlockingQueue)))
+   (java.util.concurrent BlockingQueue LinkedBlockingQueue)
+   (com.github.luben.zstd ZstdOutputStream ZstdInputStream)
+   (java.io ByteArrayOutputStream)))
 
 (defn type->sqlite3-bind [param]
   (cond
@@ -213,6 +217,22 @@
        (finally
          (q ~tx ["COMMIT"])
          (BlockingQueue/.offer conn-pool# ~tx)))))
+
+(defn encode
+  "Encode clojure/java data and compress it with zstd."
+  [blob]
+  (with-open [out  (ByteArrayOutputStream/new)
+              zstd (ZstdOutputStream/new out
+                     ;; compression level
+                     3)]
+    (deed/encode-to blob zstd)
+    (ByteArrayOutputStream/.toByteArray out)))
+
+(defn decode
+  "Decode clojure/java data and compress it with zstd."
+  [blob]
+  (with-open [in (ZstdInputStream/new (io/input-stream blob))]
+    (deed/decode-from in)))
 
 ;; WAL + single writer enforced at the application layer means you don't need
 ;; to handle SQLITE_BUSY or SQLITE_LOCKED.
