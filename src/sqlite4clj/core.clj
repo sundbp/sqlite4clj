@@ -219,12 +219,13 @@
          (BlockingQueue/.offer conn-pool# ~tx)))))
 
 (defn encode
-  "Encode clojure/java data and compress it with zstd."
-  [blob]
+  "Encode clojure/java data and compress it with zstd. Compression quality
+  ranges between -7 and 22 and has negligible impact on decompression speed."
+  [blob & [{:keys [quality]}]]
   (with-open [out  (ByteArrayOutputStream/new)
               zstd (ZstdOutputStream/new out
-                     ;; compression level
-                     3)]
+                     ;; compression level (max is 22)
+                     (or quality 5))]
     (deed/encode-to blob zstd)
     (ByteArrayOutputStream/.toByteArray out)))
 
