@@ -12,8 +12,7 @@
     (integer? param) `api/bind-int
     (double? param)  `api/bind-double
     (string? param)  `api/bind-text
-    (bytes? param)   `api/bind-blob
-    :else            `api/bind-encoded-blob))
+    :else            `api/bind-blob))
 
 (defmacro build-bind-fn [first-run-params]
   (let [stmt   (gensym)

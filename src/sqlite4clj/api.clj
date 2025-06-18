@@ -31,15 +31,13 @@
 (defn decode
   "Decode Clojure data and compress it with zstd."
   [blob]
-  (if (= (first blob) ENCODED_BLOB)
-    (let [decompressor (ZstdNativeDecompressor/new)
-          uncompressed (byte-array
-                         (ZstdDecompressor/.getDecompressedSize decompressor
-                           blob 1 (dec (count blob))))]
-      (ZstdDecompressor/.decompress decompressor blob 1 (dec (count blob))
-        uncompressed 0 (count uncompressed))
-      (deed/decode-from uncompressed))
-    blob))
+  (let [decompressor (ZstdNativeDecompressor/new)
+        uncompressed (byte-array
+                       (ZstdDecompressor/.getDecompressedSize decompressor
+                         blob 1 (dec (count blob))))]
+    (ZstdDecompressor/.decompress decompressor blob 1 (dec (count blob))
+      uncompressed 0 (count uncompressed))
+    (deed/decode-from uncompressed)))
 
 (defn copy-resource [resource-path output-path]
   (with-open [in  (io/input-stream (io/resource resource-path))
@@ -157,19 +155,9 @@
    ::mem/pointer] ::mem/int
   sqlite3-bind-blob-native
   [pdb idx blob]
-  (let [blob-l (count blob)]
-    (sqlite3-bind-blob-native pdb idx
-      (mem/serialize blob [::mem/array ::mem/byte blob-l])
-      blob-l
-      sqlite-transient)))
-
-(defcfn bind-encoded-blob
-  "sqlite3_bind_blob"
-  [::mem/pointer ::mem/int ::mem/pointer ::mem/int
-   ::mem/pointer] ::mem/int
-  sqlite3-bind-blob-native
-  [pdb idx blob]
-  (let [blob   (encode blob 3)
+  (let [blob   (if (bytes? blob) blob
+                   ;; Encode if not bytes
+                   (encode blob 3))
         blob-l (count blob)]
     (sqlite3-bind-blob-native pdb idx
       (mem/serialize blob [::mem/array ::mem/byte blob-l])
@@ -206,12 +194,14 @@
   sqlite3_column_blob-native
   [stmt idx]
   (let [result (sqlite3_column_blob-native stmt idx)
-        size   (column-bytes stmt idx)]
-    (-> (mem/deserialize
-          (mem/reinterpret result
-            (mem/size-of [::mem/array ::mem/byte size]))
-          [::mem/array ::mem/byte size :raw? true])
-      decode)))
+        size   (column-bytes stmt idx)
+        blob   (mem/deserialize
+               (mem/reinterpret result
+                 (mem/size-of [::mem/array ::mem/byte size]))
+               [::mem/array ::mem/byte size :raw? true])]
+    (if (= (first blob) ENCODED_BLOB)
+      (decode blob)
+      blob)))
 
 (defcfn column-type
   sqlite3_column_type
