@@ -7,7 +7,7 @@
            ;; Clojure data encoding
            com.github.igrishaev/deed-core {:mvn/version "0.1.0"}
            ;; Data compression
-           com.github.luben/zstd-jni      {:mvn/version "1.5.7-3"}}
+           io.airlift/aircompressor-v3    {:mvn/version "3.3"}}
  :aliases {:dev {:extra-paths ["dev"]
                  :jvm-opts
                  ["--enable-native-access=ALL-UNNAMED"

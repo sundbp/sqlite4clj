@@ -4,12 +4,12 @@
   (:require
    [sqlite4clj.api :as api]
    [deed.core :as deed]
-   [clojure.core.cache.wrapped :as cache]
-   [clojure.java.io :as io])
+   [clojure.core.cache.wrapped :as cache])
   (:import
    (java.util.concurrent BlockingQueue LinkedBlockingQueue)
-   (com.github.luben.zstd ZstdOutputStream ZstdInputStream)
-   (java.io ByteArrayOutputStream)))
+   (java.util Arrays)
+   (io.airlift.compress.v3.zstd ZstdCompressor ZstdDecompressor
+     ZstdNativeCompressor ZstdNativeDecompressor)))
 
 (defn type->sqlite3-bind [param]
   (cond
@@ -218,22 +218,37 @@
          (q ~tx ["COMMIT"])
          (BlockingQueue/.offer conn-pool# ~tx)))))
 
+;; TODO: Using the memory api blob can be even more efficient!
+;; there would be no converting to byte array and no copies
+
 (defn encode
-  "Encode clojure/java data and compress it with zstd. Compression quality
+  "Encode Clojure data and compress it with zstd. Compression quality
   ranges between -7 and 22 and has negligible impact on decompression speed."
   [blob & [{:keys [quality]}]]
-  (with-open [out  (ByteArrayOutputStream/new)
-              zstd (ZstdOutputStream/new out
-                     ;; compression level (max is 22)
-                     (or quality 5))]
-    (deed/encode-to blob zstd)
-    (ByteArrayOutputStream/.toByteArray out)))
+  (let [compressor (ZstdNativeCompressor/new (or quality 3))
+        blob       (deed/encode-to-bytes blob)
+        compressed (byte-array
+                     (ZstdCompressor/.maxCompressedLength compressor
+                       (count blob)))
+        compressed-size
+        (ZstdCompressor/.compress compressor blob 0 (count blob) compressed 0
+          (count compressed))]
+    (Arrays/copyOfRange compressed 0 compressed-size)))
+
 
 (defn decode
-  "Decode clojure/java data and compress it with zstd."
+  "Decode Clojure data and compress it with zstd."
   [blob]
-  (with-open [in (ZstdInputStream/new (io/input-stream blob))]
-    (deed/decode-from in)))
+  (let [decompressor (ZstdNativeDecompressor/new)
+        uncompressed (byte-array
+                       (ZstdDecompressor/.getDecompressedSize decompressor
+                         blob 0 (count blob)))]
+    (ZstdDecompressor/.decompress decompressor blob 0 (count blob)
+      uncompressed 0 (count uncompressed))
+    (deed/decode-from uncompressed)))
+
+(comment
+  (decode (encode ["hello" "hello" "hello" "hello" "hello" "hello"])))
 
 ;; WAL + single writer enforced at the application layer means you don't need
 ;; to handle SQLITE_BUSY or SQLITE_LOCKED.
