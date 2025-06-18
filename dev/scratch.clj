@@ -157,4 +157,11 @@
   (type (first (d/q reader ["SELECT data FROM blobby WHERE id = ?" "blob-test2"])))
   (d/q reader ["SELECT id FROM blobby WHERE id = ?" "blob-test1"])
 
+  (d/q writer
+    ["INSERT INTO blobby (id, data) VALUES (?, ?)"
+     "blob-test3"
+     ["some encoded blob"]])
+
+  (d/q reader ["SELECT id, data FROM blobby WHERE id = ?" "blob-test3"])
+
   )

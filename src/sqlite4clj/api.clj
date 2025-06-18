@@ -2,10 +2,44 @@
   "These function map directly to SQLite's C API."
   (:require
    [clojure.java.io :as io]
-   [coffi.ffi :as ffi :refer [defcfn]]
-   [coffi.mem :as mem]) 
+   [coffi.ffi :as ffi :refer [defcfn]]   
+   [deed.core :as deed]
+   [coffi.mem :as mem])
   (:import
-   [java.nio.file Files]))
+   [java.nio.file Files]
+   [java.util Arrays]
+   [io.airlift.compress.v3.zstd ZstdCompressor ZstdDecompressor
+    ZstdNativeCompressor ZstdNativeDecompressor]))
+
+(def ENCODED_BLOB (byte 1))
+
+(defn encode
+  "Encode Clojure data and compress it with zstd. Compression quality
+  ranges between -7 and 22 and has negligible impact on decompression speed."
+  [blob quality]
+  (let [compressor (ZstdNativeCompressor/new (or quality 3))
+        blob       (deed/encode-to-bytes blob)
+        compressed (byte-array
+                     (inc (ZstdCompressor/.maxCompressedLength compressor
+                            (count blob)))
+                     [ENCODED_BLOB])
+        compressed-size
+        (ZstdCompressor/.compress compressor blob 0 (count blob) compressed 1
+          (dec (count compressed)))]
+    (Arrays/copyOfRange compressed 0 (inc compressed-size))))
+
+(defn decode
+  "Decode Clojure data and compress it with zstd."
+  [blob]
+  (if (= (first blob) ENCODED_BLOB)
+    (let [decompressor (ZstdNativeDecompressor/new)
+          uncompressed (byte-array
+                         (ZstdDecompressor/.getDecompressedSize decompressor
+                           blob 1 (dec (count blob))))]
+      (ZstdDecompressor/.decompress decompressor blob 1 (dec (count blob))
+        uncompressed 0 (count uncompressed))
+      (deed/decode-from uncompressed))
+    blob))
 
 (defn copy-resource [resource-path output-path]
   (with-open [in  (io/input-stream (io/resource resource-path))
@@ -129,6 +163,19 @@
       blob-l
       sqlite-transient)))
 
+(defcfn bind-encoded-blob
+  "sqlite3_bind_blob"
+  [::mem/pointer ::mem/int ::mem/pointer ::mem/int
+   ::mem/pointer] ::mem/int
+  sqlite3-bind-blob-native
+  [pdb idx blob]
+  (let [blob   (encode blob 3)
+        blob-l (count blob)]
+    (sqlite3-bind-blob-native pdb idx
+      (mem/serialize blob [::mem/array ::mem/byte blob-l])
+      blob-l
+      sqlite-transient)))
+
 (defcfn step
   sqlite3_step
   [::mem/pointer] ::mem/int)
@@ -160,10 +207,11 @@
   [stmt idx]
   (let [result (sqlite3_column_blob-native stmt idx)
         size   (column-bytes stmt idx)]
-    (mem/deserialize 
-      (mem/reinterpret result
-        (mem/size-of [::mem/array ::mem/byte size]))
-      [::mem/array ::mem/byte size :raw? true])))
+    (-> (mem/deserialize
+          (mem/reinterpret result
+            (mem/size-of [::mem/array ::mem/byte size]))
+          [::mem/array ::mem/byte size :raw? true])
+      decode)))
 
 (defcfn column-type
   sqlite3_column_type
