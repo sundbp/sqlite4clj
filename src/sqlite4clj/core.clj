@@ -100,8 +100,8 @@
                     (step-rows stmt col-fn [(col-fn stmt)]))
                   code)))))]
     (cond
-      (vector? result) result
-      (= result 101)   []
+      (vector? result) (when (seq result) result)
+      (= result 101)   nil
       :else            (throw (api/sqlite-ex-info (:pdb conn) result
                                 {:sql    (first query)
                                  :params (subvec query 1)})))))
@@ -167,7 +167,9 @@
     {:writer writer
      :reader reader}))
 
-(defn q [{:keys [conn-pool] :as tx} query]
+(defn q
+  "Run a query against a db. Return nil when no results."
+  [{:keys [conn-pool] :as tx} query]
   (if conn-pool
     (let [conn (BlockingQueue/.take conn-pool)]
       (try
