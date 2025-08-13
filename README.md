@@ -57,7 +57,7 @@ Unwrapped results when querying a single column:
 
 ```clojure
 (d/q (:reader db)
-  ["SELECT chunk_id, state FROM cell WHERE chunk_id = ?" 1978])
+  ["SELECT chunk_id FROM cell WHERE chunk_id = ?" 1978])
 
 =>
 [1978
