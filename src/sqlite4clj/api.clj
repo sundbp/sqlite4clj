@@ -11,33 +11,32 @@
    [io.airlift.compress.v3.zstd ZstdCompressor ZstdDecompressor
     ZstdNativeCompressor ZstdNativeDecompressor]))
 
-(def ENCODED_BLOB (byte 1))
+(def RAW_BLOB          (byte 0))
+(def ZSTD_ENCODED_BLOB (byte 1))
+(def ZSTD_BLOB         (byte 2))
 
-(defn encode
-  "Encode Clojure data and compress it with zstd. Compression quality
-  ranges between -7 and 22 and has negligible impact on decompression speed."
+(defn compress
+  " Compression quality ranges between -7 and 22 and has negligible impact
+  on decompression speed."
   [blob quality]
   (let [compressor (ZstdNativeCompressor/new (or quality 3))
-        blob       (deed/encode-to-bytes blob)
         compressed (byte-array
                      (inc (ZstdCompressor/.maxCompressedLength compressor
                             (count blob)))
-                     [ENCODED_BLOB])
+                     [ZSTD_ENCODED_BLOB])
         compressed-size
         (ZstdCompressor/.compress compressor blob 0 (count blob) compressed 1
           (dec (count compressed)))]
     (Arrays/copyOfRange compressed 0 (inc compressed-size))))
 
-(defn decode
-  "Decode Clojure data and compress it with zstd."
-  [blob]
+(defn decompress [blob]
   (let [decompressor (ZstdNativeDecompressor/new)
         uncompressed (byte-array
                        (ZstdDecompressor/.getDecompressedSize decompressor
                          blob 1 (dec (count blob))))]
     (ZstdDecompressor/.decompress decompressor blob 1 (dec (count blob))
       uncompressed 0 (count uncompressed))
-    (deed/decode-from uncompressed)))
+    uncompressed))
 
 (defn copy-resource [resource-path output-path]
   (with-open [in  (io/input-stream (io/resource resource-path))
@@ -155,9 +154,13 @@
    ::mem/pointer] ::mem/int
   sqlite3-bind-blob-native
   [pdb idx blob]
-  (let [blob   (if (bytes? blob) blob
-                   ;; Encode if not bytes
-                   (encode blob 3))
+  (let [blob   (if (bytes? blob)
+                 ;; Dispatch on first byte
+                 (case (first blob)
+                   RAW_BLOB  blob
+                   ZSTD_BLOB (compress blob 3))
+                 ;; Encode and compress if not bytes
+                 (-> blob deed/encode-to-bytes (compress 3)))
         blob-l (count blob)]
     (sqlite3-bind-blob-native pdb idx
       (mem/serialize blob [::mem/array ::mem/byte blob-l])
@@ -196,12 +199,13 @@
   (let [result (sqlite3_column_blob-native stmt idx)
         size   (column-bytes stmt idx)
         blob   (mem/deserialize
-               (mem/reinterpret result
-                 (mem/size-of [::mem/array ::mem/byte size]))
-               [::mem/array ::mem/byte size :raw? true])]
-    (if (= (first blob) ENCODED_BLOB)
-      (decode blob)
-      blob)))
+                 (mem/reinterpret result
+                   (mem/size-of [::mem/array ::mem/byte size]))
+                 [::mem/array ::mem/byte size :raw? true])]
+    (case (first blob)
+      ZSTD_ENCODED_BLOB (-> blob decompress deed/decode-from)
+      ZSTD_BLOB         (-> blob decompress)
+      RAW_BLOB          blob)))
 
 (defcfn column-type
   sqlite3_column_type

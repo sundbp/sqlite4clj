@@ -111,11 +111,32 @@ The connection pools are not thread pools, they use a `LinkedBlockingQueue` to l
 
 The two main speedups are from caching query statements at a connection level and using inline caching of column reading functions.
 
+## BLOB type
+
+SQLite's blob types are incredibly flexible. But, require establishing some conventions. For sqlite4clj the conventions are as follows:
+
+- When inserting/updating a non `byte/1` (byte array) it will attempt to serialize the Clojure/Java data using [deed](https://github.com/igrishaev/deed). It will then compress the data using ZSTD. The first byte of the blob will be `ZSTD_ENCODED_BLOB`.
+- When inserting/updating a `byte/1` (byte array) it will read the first byte and dispatch based on it's value. This byte should always be reserved for sqlite4clj (⚠️: passing not adding the  correct sqlite4clj byte to the front of your blob will result in unexpected behaviour).
+
+Currently supported values are for the sqlite4clj byte are:
+
+```clojure
+(def RAW_BLOB          (byte 0))
+(def ZSTD_ENCODED_BLOB (byte 1))
+(def ZSTD_BLOB         (byte 2))
+```
+
+- When reading a `ZSTD_ENCODED_BLOB` the value will be decompressed and decoded automatically.
+- When reading a `ZSTD_BLOB` the value will be decompressed automatically. The leading byte will be `2`. Make sure to either operate on that byte array from the `1` index (rather than `0`). Or use `(Arrays/copyOfRange blob 1 (count blob))` so remove the first byte before passing the blob into your decoder.
+- When reading a `RAW_BLOB` the leading byte will be `0`. Make sure to either operate on that byte array from the `1` index (rather than `0`). Or use `(Arrays/copyOfRange blob 1 (count blob))` so remove the first byte before passing the blob into your decoder.
+
 ## Further reading
 
 [Clojure: SQLite C API with project Panama and Coffi](https://andersmurphy.com/2025/05/20/clojure-sqlite-c-api-with-project-panama-and-coffi.html)
 
 ## Building SQLite from source
+
+Compile flags have been used to tune SQLite for more performance.
 
 ```
 gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
