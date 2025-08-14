@@ -4,7 +4,7 @@
 
 >⚠️ **WARNING:**  API can change at any time! Use at your own risk.
 
-Conceptually sqlite4clj is inspired by sqlite4java a sqlite libaray that doesn't use the JDBC interface. The goal of sqlite4clj is to have a minimalist FFI binding to SQLite's C API using Java 22 FFI (project panama). Tighter integration with SQLite can in theory offer better performance and features not available through JDBC interfaces.
+Conceptually sqlite4clj is inspired by sqlite4java a sqlite library that doesn't use the JDBC interface. The goal of sqlite4clj is to have a minimalist FFI binding to SQLite's C API using Java 22 FFI (project panama). Tighter integration with SQLite can in theory offer better performance and features not available through JDBC interfaces.
 
 By using [coffi](https://github.com/IGJoshua/coffi) to interface with SQLite's C API directly with FFI we bypass the need for: [sqlite-jdbc](https://github.com/xerial/sqlite-jdbc), [hikariCP](https://github.com/brettwooldridge/HikariCP) and [next.jdbc](https://github.com/seancorfield/next-jdbc). This massively reduces the amount of code that needs to be maintained (and a much smaller jar), allows us to use Clojure to interface with SQLite directly. It also makes it easier to add SQLite specific features. In my case I was looking to cache prepared statement for each connection (which is not possible with HikariCP) but can lead to considerable performance gains on complex queries.
 
@@ -125,7 +125,20 @@ SQLite's blob types are incredibly flexible. But, require establishing some conv
 
 [Clojure: SQLite C API with project Panama and Coffi](https://andersmurphy.com/2025/05/20/clojure-sqlite-c-api-with-project-panama-and-coffi.html)
 
-## Building SQLite from source
+## Loading the Native Library
+
+Bundled in the classpath is pre-built libsqlite3 shared library for:
+
+- macos: aarch64
+- linux: x86_64
+
+If you want to provide your own native library then specify the `sqlite4clj.native-lib` system property:
+
+- `-Dsqlite4clj.native-lib=bundled`, uses the pre-built library (default if property is omitted)
+- `-Dsqlite4clj.native-lib=system`, loads the sqlite3 library from the `java.library.path` (which includes `LD_LIBRARY_PATH`)
+- `-Dsqlite4clj.native-lib=/path/to/libsqlite3.so`, the value is interpreted as a path to a file that is loaded directly
+
+### Building SQLite from source
 
 Compile flags have been used to tune SQLite for more performance.
 
