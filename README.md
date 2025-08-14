@@ -140,7 +140,16 @@ If you want to provide your own native library then specify the `sqlite4clj.nati
 
 ### Building SQLite from source
 
-Compile flags have been used to tune SQLite for more performance.
+The compile flags used here are optional optimizations based on the [SQLite compile guide](https://sqlite.org/compile.html).
+Most flags remove unused features to reduce binary size and improve performance.
+
+The key flag is `SQLITE_THREADSAFE=2`, which sets SQLite to multi-threaded mode.
+This allows safe concurrent use across multiple threads as long as each database
+connection (and its prepared statements) stays within a single thread.
+
+Since sqlite4clj manages connections through a thread pool that guarantees this
+constraint, we can safely use this more performant threading mode instead of the
+default Serialized mode.
 
 ```
 gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
