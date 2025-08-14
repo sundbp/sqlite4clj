@@ -115,20 +115,11 @@ The two main speedups are from caching query statements at a connection level an
 
 SQLite's blob types are incredibly flexible. But, require establishing some conventions. For sqlite4clj the conventions are as follows:
 
-- When inserting/updating a non `byte/1` (byte array) it will attempt to serialize the Clojure/Java data using [deed](https://github.com/igrishaev/deed). It will then compress the data using ZSTD. The first byte of the blob will be `ZSTD_ENCODED_BLOB`.
-- When inserting/updating a `byte/1` (byte array) it will read the first byte and dispatch based on it's value. This byte should always be reserved for sqlite4clj (⚠️: passing not adding the  correct sqlite4clj byte to the front of your blob will result in unexpected behaviour).
-
-Currently supported values are for the sqlite4clj byte are:
-
-```clojure
-(def RAW_BLOB          (byte 0))
-(def ZSTD_ENCODED_BLOB (byte 1))
-(def ZSTD_BLOB         (byte 2))
-```
+- When inserting/updating a non `byte/1` (byte array) it will attempt to serialize the Clojure/Java data using [deed](https://github.com/igrishaev/deed). It will then compress the data using ZSTD. The first byte of the blob will be `ZSTD_ENCODED_BLOB` (`1`).
+- When inserting/updating a `byte/1` (byte array) it will insert a leading byte that will be `RAW_BLOB` (`0`).
 
 - When reading a `ZSTD_ENCODED_BLOB` the value will be decompressed and decoded automatically.
-- When reading a `ZSTD_BLOB` the value will be decompressed automatically. The leading byte will be `2`. Make sure to either operate on that byte array from the `1` index (rather than `0`). Or use `(Arrays/copyOfRange blob 1 (count blob))` so remove the first byte before passing the blob into your decoder.
-- When reading a `RAW_BLOB` the leading byte will be `0`. Make sure to either operate on that byte array from the `1` index (rather than `0`). Or use `(Arrays/copyOfRange blob 1 (count blob))` so remove the first byte before passing the blob into your decoder.
+- When reading a `RAW_BLOB` the leading byte (`RAW_BLOB`) will be stripped before being returned.
 
 ## Further reading
 
