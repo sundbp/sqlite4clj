@@ -53,17 +53,32 @@
               out (io/output-stream (io/file output-path))]
     (io/copy in out)))
 
+(defn load-bundled-library []
+  (let [arch              (System/getProperty "os.arch")
+        res-file          ({"aarch64" "sqlite3_aarch64.so"
+                            "amd64"   "sqlite3_amd64.so"
+                            "x86_64"  "sqlite3_amd64.so"}
+                           arch)
+        temp-lib-filename (str "sqlite4clj_temp_" res-file)]
+    (println "loading bundled SQLite library")
+    (copy-resource res-file temp-lib-filename)
+    (ffi/load-library temp-lib-filename)
+    ;; We delete once loaded
+    (Files/deleteIfExists (.toPath (io/file temp-lib-filename)))))
+
+(defn load-system-library []
+  (println "loading system SQLite library")
+  (ffi/load-system-library "sqlite3"))
+
 ;; Load appropriate SQLite library
-(let [arch              (System/getProperty "os.arch")
-      res-file          ({"aarch64" "sqlite3_aarch64.so"
-                          "amd64"   "sqlite3_amd64.so"
-                          "x86_64"  "sqlite3_amd64.so"}
-                     arch)
-      temp-lib-filename (str "sqlite4clj_temp_" res-file)]
-  (copy-resource res-file temp-lib-filename)
-  (ffi/load-library temp-lib-filename)
-  ;; We delete once loaded
-  (Files/deleteIfExists (.toPath (io/file temp-lib-filename))))
+(let [src (System/getProperty "sqlite4clj.native-lib")]
+  (cond
+    ;; default to bundled
+    (or (nil? src)
+        (= src "bundled")) (load-bundled-library)
+    (= src "system")       (load-system-library)
+    :else
+    (ffi/load-library src)))
 
 (defcfn initialize
   sqlite3_initialize
