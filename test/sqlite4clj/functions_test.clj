@@ -49,7 +49,7 @@
                            (count args)))
 
       (is (= [0] (d/q (:writer db) ["SELECT count_args()"])))
-      (is (= [3] (d/q (:writer db) ["SELECT count_args(1, \"foo\", 3)"])))
+      (is (= [3] (d/q (:writer db) ["SELECT count_args(1, 'foo', 3)"])))
       (is (= [5] (d/q (:writer db) ["SELECT count_args(1, 2, 3, 4, 5)"]))))))
 
 (deftest multi-arity-functions
