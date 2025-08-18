@@ -169,6 +169,8 @@
            :pragma    pragma})]
     {:writer writer
      :reader reader
+     ;; Prevents application function callback pointers from getting
+     ;; garbage collected.
      :internal {:app-functions (atom {})}}))
 
 (defn q
