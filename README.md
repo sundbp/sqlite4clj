@@ -121,10 +121,6 @@ SQLite's blob types are incredibly flexible. But, require establishing some conv
 - When reading a `ZSTD_ENCODED_BLOB` the value will be decompressed and decoded automatically.
 - When reading a `RAW_BLOB` the leading byte (`RAW_BLOB`) will be stripped before being returned.
 
-## Further reading
-
-[Clojure: SQLite C API with project Panama and Coffi](https://andersmurphy.com/2025/05/20/clojure-sqlite-c-api-with-project-panama-and-coffi.html)
-
 ## Loading the Native Library
 
 Bundled in the classpath is pre-built libsqlite3 shared library for:
@@ -134,7 +130,6 @@ Bundled in the classpath is pre-built libsqlite3 shared library for:
 - macos:   x86_64
 - linux:   x86_64
 - windows: x86_64
-
 
 If you want to provide your own native library then specify the `sqlite4clj.native-lib` system property:
 
@@ -174,6 +169,10 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
    sqlite3.c -lpthread -ldl -lm -o sqlite3.so
 ```
 
+## Projects using sqlite4clj
+
+- [datahike-sqlite](https://github.com/outskirtslabs/datahike-sqlite)
+- [One Billion Checkboxes](https://checkboxes.andersmurphy.com/)
 
 ## Development & Contributing
 
