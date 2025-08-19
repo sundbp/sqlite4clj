@@ -170,6 +170,7 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
 ## Projects using sqlite4clj
 
 - [datahike-sqlite](https://github.com/outskirtslabs/datahike-sqlite)
+- [hyperlith](https://github.com/andersmurphy/hyperlith)
 - [One Billion Checkboxes](https://checkboxes.andersmurphy.com/)
 
 ## Development & Contributing
