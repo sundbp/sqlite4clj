@@ -2,8 +2,6 @@
 
 >⚠️ **WARNING:**  This project is highly experimental and not production ready.
 
->⚠️ **WARNING:**  API can change at any time! Use at your own risk.
-
 Conceptually sqlite4clj is inspired by sqlite4java a sqlite library that doesn't use the JDBC interface. The goal of sqlite4clj is to have a minimalist FFI binding to SQLite's C API using Java 22 FFI (project panama). Tighter integration with SQLite can in theory offer better performance and features not available through JDBC interfaces.
 
 By using [coffi](https://github.com/IGJoshua/coffi) to interface with SQLite's C API directly with FFI we bypass the need for: [sqlite-jdbc](https://github.com/xerial/sqlite-jdbc), [hikariCP](https://github.com/brettwooldridge/HikariCP) and [next.jdbc](https://github.com/seancorfield/next-jdbc). This massively reduces the amount of code that needs to be maintained (and a much smaller jar), allows us to use Clojure to interface with SQLite directly. It also makes it easier to add SQLite specific features. In my case I was looking to cache prepared statement for each connection (which is not possible with HikariCP) but can lead to considerable performance gains on complex queries.
