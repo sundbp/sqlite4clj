@@ -129,8 +129,12 @@ SQLite's blob types are incredibly flexible. But, require establishing some conv
 
 Bundled in the classpath is pre-built libsqlite3 shared library for:
 
-- macos: aarch64
-- linux: x86_64
+- macos:   aarch64
+- linux:   aarch64
+- macos:   x86_64
+- linux:   x86_64
+- windows: x86_64
+
 
 If you want to provide your own native library then specify the `sqlite4clj.native-lib` system property:
 
