@@ -168,8 +168,8 @@
   [::mem/pointer] ::mem/int)
 
 (defcfn bind-int
-  sqlite3_bind_int
-  [::mem/pointer ::mem/int ::mem/int] ::mem/int)
+  sqlite3_bind_int64
+  [::mem/pointer ::mem/int ::mem/long] ::mem/int)
 
 (defcfn bind-double
   sqlite3_bind_double
@@ -218,9 +218,9 @@
   sqlite3_column_double
   [::mem/pointer ::mem/int] ::mem/double)
 
-(defcfn column-int 
-  sqlite3_column_int
-  [::mem/pointer ::mem/int] ::mem/int)
+(defcfn column-int
+  sqlite3_column_int64
+  [::mem/pointer ::mem/int] ::mem/long)
 
 (defcfn column-text
   sqlite3_column_text
@@ -271,8 +271,8 @@
   [::mem/pointer] ::mem/c-string)
 
 (defcfn value-int
-  sqlite3_value_int
-  [::mem/pointer] ::mem/int)
+  sqlite3_value_int64
+  [::mem/pointer] ::mem/long)
 
 (defcfn value-double
   sqlite3_value_double
@@ -317,8 +317,8 @@
                                 sqlite-transient)))
 
 (defcfn result-int
-  sqlite3_result_int
-  [::mem/pointer ::mem/int] ::mem/void)
+  sqlite3_result_int64
+  [::mem/pointer ::mem/long] ::mem/void)
 
 (defcfn result-double
   sqlite3_result_double
