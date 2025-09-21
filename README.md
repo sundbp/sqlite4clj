@@ -167,7 +167,9 @@ Because SQLite supports [Indexes On Expressions](https://www.sqlite.org/expridx.
     WHERE entity_type(data) IS NOT NULL"])
 
 (d/q reader
-    ["explain query plan select * from entity where entity_type(data) = ?" "foo"])
+    ["select * from entity where entity_type(data) = ?" "foo"])
+;; =>
+;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
     
 ;; Check index is being used
 (d/q reader 
