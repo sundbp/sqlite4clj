@@ -119,6 +119,62 @@ SQLite's blob types are incredibly flexible. But, require establishing some conv
 - When reading a `ZSTD_ENCODED_BLOB` the value will be decompressed and decoded automatically.
 - When reading a `RAW_BLOB` the leading byte (`RAW_BLOB`) will be stripped before being returned.
 
+## Automatic edn encoding/decoding
+
+sqlite4clj automatically encodes (and zstd compressed) any edn object you pass it.
+
+```clojure
+(d/q writer
+    ["CREATE TABLE IF NOT EXISTS entity(id TEXT PRIMARY KEY, data BLOB) WITHOUT ROWID"])
+    
+(d/q writer
+    ["INSERT INTO entity (id, data) VALUES (?, ?)"
+     (str (random-uuid))
+     ;; this map will be encoded and compressed automatically
+     {:type "foo" :a (rand-int 10) :b (rand-int 10)}])
+     
+(d/q reader ["select * from entity])
+;; => 
+;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
+```
+
+This effectively lets you use SQLite as an edn document store. Check out the [deed](https://github.com/igrishaev/deed)  for the full list of supported Java/Clojure encodings.
+
+## Application functions
+
+SQLite supports [Application-Defined SQL Functions](https://www.sqlite.org/appfunc.html). This lets you extend SQL with clojure defined functions. sqlite4clj streamlines these for interactive use at the repl.
+
+```clojure
+(defn entity-type [blob]
+  (-> blob :type))
+
+(d/create-function db "entity_type" #'entity-type {:deterministic? true})
+
+(d/q reader ["select * from entity where entity_type(data) = ?" "foo"])
+;; =>
+;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
+```
+
+When dealing with columns that are encoded edn blobs they will automatically decoded.
+
+## Indexing on encoded edn blobs
+
+Because SQLite supports [Indexes On Expressions](https://www.sqlite.org/expridx.html) and [Partial Indexes](https://www.sqlite.org/partialindex.html) we can easily index on any arbitrary encoded edn data.
+
+```clojure
+(d/q writer
+    ["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
+    WHERE entity_type(data) IS NOT NULL"])
+
+(d/q reader
+    ["explain query plan select * from entity where entity_type(data) = ?" "foo"])
+    
+;; Check index is being used
+(d/q reader 
+  ["explain query plan select * from entity where entity_type(data) = ?" "foo"])
+;; -> [[3 0 62 "SEARCH entity USING INDEX entity_type_idx (<expr>=?)"]]
+```
+
 ## Loading the Native Library
 
 Bundled in the classpath is pre-built libsqlite3 shared library for:
