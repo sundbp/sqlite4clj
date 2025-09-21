@@ -119,8 +119,11 @@
    ;; SQLITE_BUSY error should almost never happen, see:
    ;; https://sqlite.org/wal.html#sometimes_queries_return_sqlite_busy_in_wal_mode
    :busy_timeout 100
+   ;; :optimize cannot be run on connection open when using application
+   ;; function in indexes. As you will get a unknown function error.
    ;; https://sqlite.org/pragma.html#pragma_optimize
-   :optimize     0x10002})
+   ;; :optimize     0x10002
+   })
 
 (defn pragma->set-pragma-query [pragma read-only]
   (conj (->> (merge default-pragma pragma)
