@@ -133,7 +133,7 @@ sqlite4clj automatically encodes (and zstd compressed) any edn object you pass i
      ;; this map will be encoded and compressed automatically
      {:type "foo" :a (rand-int 10) :b (rand-int 10)}])
      
-(d/q reader ["select * from entity])
+(d/q reader ["select * from entity"])
 ;; => 
 ;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
 ```
