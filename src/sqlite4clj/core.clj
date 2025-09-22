@@ -118,7 +118,13 @@
    ;; Because of WAL and a single writer at the application level
    ;; SQLITE_BUSY error should almost never happen, see:
    ;; https://sqlite.org/wal.html#sometimes_queries_return_sqlite_busy_in_wal_mode
-   :busy_timeout 100
+   ;; However, sometime when using litestream for backups it can happen.
+   ;; So we set it to the recommended value see:
+   ;;  https://litestream.io/tips/#busy-timeout
+   :busy_timeout 5000
+   ;; Litestream recommends disabling autocheckpointing under high write loads
+   ;; https://litestream.io/tips/#disable-autocheckpoints-for-high-write-load-servers
+   :wal_autocheckpoint 0
    ;; :optimize cannot be run on connection open when using application
    ;; function in indexes. As you will get a unknown function error.
    ;; https://sqlite.org/pragma.html#pragma_optimize
