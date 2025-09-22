@@ -23,10 +23,12 @@
     ["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
     WHERE entity_type(data) IS NOT NULL"])
 
+  (def type ["foo" "bar" "bam" "baz"])
+
   (d/q writer
     ["INSERT INTO entity (id, data) VALUES (?, ?)"
      (str (random-uuid))
-     {:type "foo" :a (rand-int 10) :b (rand-int 10)}])
+     {:type (rand-nth type) :a (rand-int 10) :b (rand-int 10)}])
 
   (d/q writer
     ["INSERT INTO entity (id, data) VALUES (?, ?)"
@@ -36,10 +38,27 @@
   (d/q reader
     ["select * from entity where entity_type(data) = ?" "foo"])
 
+  (d/q reader ["select * from entity"])
+
   ;; Check index is being used
   (d/q reader
     ["explain query plan select * from entity where entity_type(data) = ?" "foo"])
   ;; -> [[3 0 62 "SEARCH entity USING INDEX entity_type_idx (<expr>=?)"]]
+
+  (d/q reader
+    ["explain query plan select * from entity order by entity_type(data)"])
+  ;; -> [[3 0 215 "SCAN entity"] [12 0 0 "USE TEMP B-TREE FOR ORDER BY"]]
+
+  (d/q reader
+    ["explain query plan select * from entity 
+where entity_type(data) is not null
+order by entity_type(data)"])
+  ;; -> [[4 0 215 "SCAN entity USING INDEX entity_type_idx"]]
+
+  (d/q reader
+    ["select * from entity 
+      where entity_type(data) is not null
+      order by entity_type(data)"])
 
 
   )

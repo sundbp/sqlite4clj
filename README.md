@@ -121,7 +121,7 @@ SQLite's blob types are incredibly flexible. But, require establishing some conv
 
 ## Automatic edn encoding/decoding
 
-sqlite4clj automatically encodes (and zstd compressed) any edn object you pass it.
+sqlite4clj automatically encodes (and zstd compressed) any edn object you pass it:
 
 ```clojure
 (d/q writer
@@ -144,6 +144,8 @@ This effectively lets you use SQLite as an edn document store. Check out the [de
 
 SQLite supports [Application-Defined SQL Functions](https://www.sqlite.org/appfunc.html). This lets you extend SQL with clojure defined functions. sqlite4clj streamlines these for interactive use at the repl.
 
+Declaring and using an application function:
+
 ```clojure
 (defn entity-type [blob]
   (-> blob :type))
@@ -161,6 +163,8 @@ When dealing with columns that are encoded edn blobs they will automatically dec
 
 Because SQLite supports [Indexes On Expressions](https://www.sqlite.org/expridx.html) and [Partial Indexes](https://www.sqlite.org/partialindex.html) we can easily index on any arbitrary encoded edn data.
 
+Using an expression index:
+
 ```clojure
 (d/q writer
     ["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
@@ -174,7 +178,62 @@ Because SQLite supports [Indexes On Expressions](https://www.sqlite.org/expridx.
 ;; Check index is being used
 (d/q reader 
   ["explain query plan select * from entity where entity_type(data) = ?" "foo"])
-;; -> [[3 0 62 "SEARCH entity USING INDEX entity_type_idx (<expr>=?)"]]
+;; => 
+;; [[3 0 62 "SEARCH entity USING INDEX entity_type_idx (<expr>=?)"]]
+```
+
+## Using partial indexes to sort on encoded edn blobs
+
+A partial index is an index over a subset of the rows of a table. This leads to smaller and faster indexes (see  [Existence Based Processing](https://www.dataorienteddesign.com/dodmain/node4.html)) when only a subset of the rows have a value you care about.
+
+Using a partial expression index:
+
+```clojure
+(d/q writer
+    ["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
+    WHERE entity_type(data) IS NOT NULL"])
+    
+(d/q reader
+    ["select * from entity 
+      where entity_type(data) is not null
+      order by entity_type(data)"])
+;; =>
+;; [["0378005a-3e28-40b0-9795-a2b85a174181" {:type "bam", :a 4, :b 3}]
+;; ["9a470400-1ebd-4bd6-8d36-b9ae06ba826a" {:type "bam", :a 0, :b 9}]
+;; ["97c18868-83e2-4eda-88da-bf89741c2242" {:type "bar", :a 9, :b 8}]
+;; ["1f272d21-7538-4397-a53d-c2a7277eee96" {:type "baz", :a 6, :b 2}]]
+```
+
+However, some care needs to be taken when partial indexes and expression indexes:
+
+>The SQLite query planner will consider using an index on an expression when the expression that is indexed appears in the WHERE clause or in the ORDER BY clause of a query, exactly as it is written in the CREATE INDEX statement.
+
+Consider the following index:
+
+```clojure
+(d/q writer
+    ["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
+    WHERE entity_type(data) IS NOT NULL"])
+```
+
+The following query will not use the index (as it omits the `where` clause):
+
+```clojure
+(d/q reader
+    ["explain query plan select * from entity order by entity_type(data)"])
+;; => 
+;; [[3 0 215 "SCAN entity"] [12 0 0 "USE TEMP B-TREE FOR ORDER BY"]]
+```
+
+The index will be used if you add the `where entity_type(data) is not null` clause:
+
+```clojure
+(d/q reader
+    ["explain query plan select * from entity 
+      where entity_type(data) is not null
+      order by entity_type(data)"])
+;; => 
+;; [[4 0 215 "SCAN entity USING INDEX entity_type_idx"]]
 ```
 
 ## Loading the Native Library
@@ -234,3 +293,4 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
 ## Development & Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md)
+p
