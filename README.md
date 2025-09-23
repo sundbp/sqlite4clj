@@ -15,7 +15,7 @@ Currently, this project is very much a proof of concept. But, I'm hoping to ulti
 Currently this library is not on maven so you have to add it via git deps (note: coffi requires at least Java 22):
 
 ```clojure
-andersmurphy/sqlite4clj 
+andersmurphy/sqlite4clj
 {:git/url "https://github.com/andersmurphy/sqlite4clj"
  :git/sha "239b38b3d3b55bc7bf18a74644d5887e8cf2a3fa"}
 ```
@@ -25,7 +25,7 @@ Initialise a db:
 ```clojure
 (ns scratch
   (:require [sqlite4clj.core :as d]))
-   
+
 (defonce db
   (d/init-db! "database.db"
     {:read-only true
@@ -33,13 +33,13 @@ Initialise a db:
      :pragma    {:foreign_keys false}}))
 ```
 
- This creates a `:reader` connection pool with a number of connections equal to `:pool-size` and a single `:writer` connection. Single writer at the application level allows you to get the most out of SQLite's performance in addition to preventing `SQLITE_BUSY` and `SQLITE_LOCKED` messages. Finally, it makes it trivial to do transaction batching at the application layer for increased write throughput.
+This creates a `:reader` connection pool with a number of connections equal to `:pool-size` and a single `:writer` connection. Single writer at the application level allows you to get the most out of SQLite's performance in addition to preventing `SQLITE_BUSY` and `SQLITE_LOCKED` messages. Finally, it makes it trivial to do transaction batching at the application layer for increased write throughput.
 
 Running a read query:
 
 ```clojure
 (d/q (:reader db)
-  ["SELECT chunk_id, state FROM cell WHERE chunk_id = ?" 1978])
+["SELECT chunk_id, state FROM cell WHERE chunk_id = ?" 1978])
 
 =>
 [[1978 0]
@@ -125,16 +125,16 @@ sqlite4clj automatically encodes (and zstd compressed) any edn object you pass i
 
 ```clojure
 (d/q writer
-    ["CREATE TABLE IF NOT EXISTS entity(id TEXT PRIMARY KEY, data BLOB) WITHOUT ROWID"])
-    
+["CREATE TABLE IF NOT EXISTS entity(id TEXT PRIMARY KEY, data BLOB) WITHOUT ROWID"])
+
 (d/q writer
     ["INSERT INTO entity (id, data) VALUES (?, ?)"
      (str (random-uuid))
      ;; this map will be encoded and compressed automatically
      {:type "foo" :a (rand-int 10) :b (rand-int 10)}])
-     
+
 (d/q reader ["select * from entity"])
-;; => 
+;; =>
 ;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
 ```
 
@@ -167,18 +167,18 @@ Using an expression index:
 
 ```clojure
 (d/q writer
-    ["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
-    WHERE entity_type(data) IS NOT NULL"])
+["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
+WHERE entity_type(data) IS NOT NULL"])
 
 (d/q reader
     ["select * from entity where entity_type(data) = ?" "foo"])
 ;; =>
 ;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
-    
+
 ;; Check index is being used
-(d/q reader 
+(d/q reader
   ["explain query plan select * from entity where entity_type(data) = ?" "foo"])
-;; => 
+;; =>
 ;; [[3 0 62 "SEARCH entity USING INDEX entity_type_idx (<expr>=?)"]]
 ```
 
@@ -192,9 +192,9 @@ Using a partial expression index:
 (d/q writer
     ["CREATE INDEX IF NOT EXISTS entity_type_idx ON entity(entity_type(data))
     WHERE entity_type(data) IS NOT NULL"])
-    
+
 (d/q reader
-    ["select * from entity 
+    ["select * from entity
       where entity_type(data) is not null
       order by entity_type(data)"])
 ;; =>
@@ -221,7 +221,7 @@ The following query will not use the index (as it omits the `where` clause):
 ```clojure
 (d/q reader
     ["explain query plan select * from entity order by entity_type(data)"])
-;; => 
+;; =>
 ;; [[3 0 215 "SCAN entity"] [12 0 0 "USE TEMP B-TREE FOR ORDER BY"]]
 ```
 
@@ -229,10 +229,10 @@ The index will be used if you add the `where entity_type(data) is not null` clau
 
 ```clojure
 (d/q reader
-    ["explain query plan select * from entity 
+    ["explain query plan select * from entity
       where entity_type(data) is not null
       order by entity_type(data)"])
-;; => 
+;; =>
 ;; [[4 0 215 "SCAN entity USING INDEX entity_type_idx"]]
 ```
 
@@ -251,6 +251,29 @@ If you want to provide your own native library then specify the `sqlite4clj.nati
 - `-Dsqlite4clj.native-lib=bundled`, uses the pre-built library (default if property is omitted)
 - `-Dsqlite4clj.native-lib=system`, loads the sqlite3 library from the `java.library.path` (which includes `LD_LIBRARY_PATH`)
 - `-Dsqlite4clj.native-lib=/path/to/libsqlite3.so`, the value is interpreted as a path to a file that is loaded directly
+
+## Replication and backups with litestream
+
+[Litestream](https://litestream.io/) is an amazing open source SQLite replication tool that lets you to stream backups to S3 compatible object storage.
+
+If litestream is installed on your system ([see] installation instructions for details](https://litestream.io/install/ )) you can start replication/ restoration on application start with `sqlite4clj.litestream/litestream-init!`.
+
+```clojure
+(litestream/init-litestream! db-name
+  {:s3-access-key-id     "XXXXXXXXXXXXXXX"
+   :s3-access-secret-key "XXXXXXXXXXXXXXX"
+   :bucket               "BUCKET NAME"
+   :endpoint             "S3 URL"
+   :region               "REGION"})
+```
+
+By default this will throw an error if backups/replication is not working correctly (to crash your application). 
+
+It will automatically attempt to restore db from replica if db does not already exist. The process is started as a JVM sub process and will be cleaned up when the application terminates.
+
+Returns the java.lang.Process that you can monitor, in the unlikely event that the litestream process crashes you can restart it by running `init-litestream!`.
+
+sqlite4clj tries to keep its dependencies to a minimum so doesn't support complex yaml generation (which would require adding something like [clj-yaml](https://github.com/clj-commons/clj-yaml) as a dependency). If the built in config generation doesn't support your needs you can supply your own litestream config string using the `custom-config-yml` option.
 
 ### Building SQLite from source
 
@@ -293,4 +316,3 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
 ## Development & Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md)
-p
