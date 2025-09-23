@@ -236,22 +236,6 @@ The index will be used if you add the `where entity_type(data) is not null` clau
 ;; [[4 0 215 "SCAN entity USING INDEX entity_type_idx"]]
 ```
 
-## Loading the Native Library
-
-Bundled in the classpath is pre-built libsqlite3 shared library for:
-
-- macos:   aarch64
-- linux:   aarch64
-- macos:   x86_64
-- linux:   x86_64
-- windows: x86_64
-
-If you want to provide your own native library then specify the `sqlite4clj.native-lib` system property:
-
-- `-Dsqlite4clj.native-lib=bundled`, uses the pre-built library (default if property is omitted)
-- `-Dsqlite4clj.native-lib=system`, loads the sqlite3 library from the `java.library.path` (which includes `LD_LIBRARY_PATH`)
-- `-Dsqlite4clj.native-lib=/path/to/libsqlite3.so`, the value is interpreted as a path to a file that is loaded directly
-
 ## Replication and backups with litestream
 
 [Litestream](https://litestream.io/) is an amazing open source SQLite replication tool that lets you to stream backups to S3 compatible object storage.
@@ -274,6 +258,22 @@ It will automatically attempt to restore db from replica if db does not already 
 Returns the java.lang.Process that you can monitor, in the unlikely event that the litestream process crashes you can restart it by running `init-litestream!`.
 
 sqlite4clj tries to keep its dependencies to a minimum so doesn't support complex yaml generation (which would require adding something like [clj-yaml](https://github.com/clj-commons/clj-yaml) as a dependency). If the built in config generation doesn't support your needs you can supply your own litestream config string using the `custom-config-yml` option.
+
+## Loading the Native Library
+
+Bundled in the classpath is pre-built libsqlite3 shared library for:
+
+- macos:   aarch64
+- linux:   aarch64
+- macos:   x86_64
+- linux:   x86_64
+- windows: x86_64
+
+If you want to provide your own native library then specify the `sqlite4clj.native-lib` system property:
+
+- `-Dsqlite4clj.native-lib=bundled`, uses the pre-built library (default if property is omitted)
+- `-Dsqlite4clj.native-lib=system`, loads the sqlite3 library from the `java.library.path` (which includes `LD_LIBRARY_PATH`)
+- `-Dsqlite4clj.native-lib=/path/to/libsqlite3.so`, the value is interpreted as a path to a file that is loaded directly
 
 ### Building SQLite from source
 
