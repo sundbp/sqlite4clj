@@ -1,8 +1,8 @@
-(ns sqlite4clj.functions
+(ns sqlite4clj.impl.functions
   (:require
    [coffi.ffi :as ffi]
    [coffi.mem :as mem]
-   [sqlite4clj.api :as api])
+   [sqlite4clj.impl.api :as api])
   (:import
    [java.lang.reflect Method]))
 

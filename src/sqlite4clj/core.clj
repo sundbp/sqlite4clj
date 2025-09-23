@@ -2,8 +2,8 @@
   "High level interface for using sqlite4clj including connection pool
   and prepared statement caching."
   (:require
-   [sqlite4clj.api :as api]
-   [sqlite4clj.functions :as funcs]
+   [sqlite4clj.impl.api :as api]
+   [sqlite4clj.impl.functions :as funcs]
    [clojure.core.cache.wrapped :as cache])
   (:import
    (java.util.concurrent BlockingQueue LinkedBlockingQueue)))

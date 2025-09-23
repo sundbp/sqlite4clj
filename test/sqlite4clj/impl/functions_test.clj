@@ -1,9 +1,9 @@
-(ns sqlite4clj.functions-test
+(ns sqlite4clj.impl.functions-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [sqlite4clj.api :as api]
+   [sqlite4clj.impl.api :as api]
+   [sqlite4clj.impl.functions :as funcs]
    [sqlite4clj.core :as d]
-   [sqlite4clj.functions :as funcs]
    [sqlite4clj.test-common :refer [test-db test-fixture with-db]]))
 
 (use-fixtures :once test-fixture)

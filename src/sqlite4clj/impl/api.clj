@@ -1,4 +1,4 @@
-(ns sqlite4clj.api
+(ns sqlite4clj.impl.api
   "These function map directly to SQLite's C API."
   (:require
    [clojure.java.io :as io]
