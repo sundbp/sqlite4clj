@@ -199,9 +199,9 @@ Using a partial expression index:
       order by entity_type(data)"])
 ;; =>
 ;; [["0378005a-3e28-40b0-9795-a2b85a174181" {:type "bam", :a 4, :b 3}]
-;; ["9a470400-1ebd-4bd6-8d36-b9ae06ba826a" {:type "bam", :a 0, :b 9}]
-;; ["97c18868-83e2-4eda-88da-bf89741c2242" {:type "bar", :a 9, :b 8}]
-;; ["1f272d21-7538-4397-a53d-c2a7277eee96" {:type "baz", :a 6, :b 2}]]
+;;  ["9a470400-1ebd-4bd6-8d36-b9ae06ba826a" {:type "bam", :a 0, :b 9}]
+;;  ["97c18868-83e2-4eda-88da-bf89741c2242" {:type "bar", :a 9, :b 8}]
+;;  ["1f272d21-7538-4397-a53d-c2a7277eee96" {:type "baz", :a 6, :b 2}]]
 ```
 
 However, some care needs to be taken when partial indexes and expression indexes:
