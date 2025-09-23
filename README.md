@@ -256,7 +256,7 @@ If you want to provide your own native library then specify the `sqlite4clj.nati
 
 [Litestream](https://litestream.io/) is an amazing open source SQLite replication tool that lets you to stream backups to S3 compatible object storage.
 
-If litestream is installed on your system ([see] installation instructions for details](https://litestream.io/install/ )) you can start replication/ restoration on application start with `sqlite4clj.litestream/litestream-init!`.
+If litestream is installed on your system ([see installation instructions for details](https://litestream.io/install/ )) you can start replication/ restoration on application start with `sqlite4clj.litestream/litestream-init!`.
 
 ```clojure
 (litestream/init-litestream! db-name
