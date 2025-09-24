@@ -40,8 +40,8 @@
     (with-open
       [rdr (-> (proc/start {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
                                   "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
-                 "litestream" "restore" "-if-db-not-exists"
-                 "-if-replica-exists" "-config" config-file db-name)
+                 "litestream" "restore" "-config" config-file db-name
+                 "-if-replica-exists" "-if-replica-exists")
                proc/stdout
                io/reader)]
       (run! (fn [x] (println x)) (line-seq rdr)))
