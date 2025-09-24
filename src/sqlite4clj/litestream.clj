@@ -36,19 +36,19 @@
         _           (spit config-file
                       (or custom-config-yml
                           (format default-config-yml-template
-                            db-name bucket db-name endpoint region)))
-        process     (proc/start
-                      {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
-                             "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
-                      "litestream" "replicate" "-config" config-file)]
-    (proc/exec {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
-                      "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
-      "litestream" "restore" "-if-db-not-exists"
-      "-if-replica-exists" "-config" config-file db-name)
-    ;; We delete config once loaded
-    (Files/deleteIfExists (.toPath (io/file config-file)))
-    ;; Return litestream process for monitoring
-    process))
+                            db-name bucket db-name endpoint region)))]
+    (with-open
+      [rdr (-> (proc/start {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
+                                  "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
+                 "litestream" "restore" "-if-db-not-exists"
+                 "-if-replica-exists" "-config" config-file db-name)
+               proc/stdout
+               io/reader)]
+      (run! (fn [x] (println x)) (line-seq rdr)))
+    ;; Return litestream replication process for monitoring
+    (proc/start {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
+                       "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
+      "litestream" "replicate" "-config" config-file)))
 
 ;; TODO: build in process monitoring.
 
