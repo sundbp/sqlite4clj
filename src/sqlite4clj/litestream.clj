@@ -5,7 +5,7 @@
 (def default-config-yml-template
   "This is a very basic yml template for using litestream with s3 compatible
   object storage. For more advanced configuration you can provide your own
-  `custom-config-yml`."
+  `config-yml`."
   "dbs:
     - path: %s
       replicas:
@@ -34,7 +34,7 @@
 
   db.db
 
-  You're local db will be different to your production db. As the full paths
+  You're local db will be different to your production db. As the absolute path
   as far as litestream is concerned will be different:
 
   /Users/username/projects/hyperlith/examples/billion_checkboxes_blob/db.db
@@ -50,12 +50,12 @@
                    ;; This allows you to provide your own yml template from
                    ;; a file, or using a more advanced yml builder like
                    ;; clj-yaml.
-                   custom-config-yml]}]
-  (let [config-file "litestream_temp.yml"
+                   config-yml]}]
+  (let [config-file ".litestream_temp.yml"
         _           (spit config-file
-                      (or custom-config-yml
-                          (format default-config-yml-template
-                            db-name bucket db-name endpoint region)))
+                      (or config-yml
+                        (format default-config-yml-template
+                          db-name bucket db-name endpoint region)))
         creds       {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
                            "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
         restore     (proc/start creds

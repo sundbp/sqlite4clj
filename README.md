@@ -257,7 +257,27 @@ It will automatically attempt to restore db from replica if db does not already 
 
 Returns the java.lang.Process that you can monitor, in the unlikely event that the litestream process crashes you can restart it by running `init-litestream!`.
 
-sqlite4clj tries to keep its dependencies to a minimum so doesn't support complex yaml generation (which would require adding something like [clj-yaml](https://github.com/clj-commons/clj-yaml) as a dependency). If the built in config generation doesn't support your needs you can supply your own litestream config string using the `custom-config-yml` option.
+sqlite4clj tries to keep its dependencies to a minimum so doesn't support complex yaml generation (which would require adding something like [clj-yaml](https://github.com/clj-commons/clj-yaml) as a dependency). If the built in config generation doesn't support your needs you can supply your own litestream config string using the `config-yml` option. Worth remembering JSON is valid YAML. 
+
+So something like this should work:
+
+```clojure
+(init-litestream! db-name
+  {:s3-access-key-id     (env :s3-access-key-id)
+   :s3-access-secret-key (env :s3-access-secret-key)
+   :config-yml
+   (edn->json
+     {:dbs
+      [{:path db-name
+        :replicas
+        [{:type          "s3"
+          :bucket        "hyperlith"
+          :endpoint      "https://nbg1.your-objectstorage.com"
+          :region        "nbg1"
+          :sync-interval "1s"}]}]}
+     ;; important not to escape slashes for this to work
+     :escape-slash false)})
+```
 
 ## Loading the Native Library
 
