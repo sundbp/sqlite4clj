@@ -1,7 +1,6 @@
 (ns sqlite4clj.litestream
   (:require [clojure.java.process :as proc]
-            [clojure.java.io :as io])
-  (:import [java.nio.file Files]))
+            [clojure.java.io :as io]))
 
 (def default-config-yml-template
   "This is a very basic yml template for using litestream with s3 compatible
@@ -17,6 +16,10 @@
          region:   %s
          sync-interval: 1s")
 
+(defn log-stdout [process]
+  (with-open [rdr (-> process proc/stdout io/reader)]
+    (run! (fn [x] (println x) (flush)) (line-seq rdr))))
+
 (defn init-litestream!
   "Throws error if litestream is not present. You want to know if your backups
   are not working. Attempts to restore db from replica if db does not already
@@ -25,7 +28,23 @@
 
   Returns the java.lang.Process that you can monitor, in the unlikely event
   that the litestream process crashes you can restart it by running
-  `init-litestream!`."
+  `init-litestream!`.
+
+  Litestream backups are path dependent. So if you use a relative path like
+
+  db.db
+
+  You're local db will be different to your production db. As the full paths
+  as far as litestream is concerned will be different:
+
+  /Users/username/projects/hyperlith/examples/billion_checkboxes_blob/db.db
+
+  vs
+
+  /home/app/db.db
+
+  This is useful if you want to keep dev and prod backups separate.
+  "
   [db-name {:keys [s3-access-key-id s3-access-secret-key
                    bucket endpoint region
                    ;; This allows you to provide your own yml template from
@@ -36,30 +55,16 @@
         _           (spit config-file
                       (or custom-config-yml
                           (format default-config-yml-template
-                            db-name bucket db-name endpoint region)))]
-    (with-open
-      [rdr (-> (proc/start {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
-                                  "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
-                 "litestream" "restore" "-config" config-file db-name
-                 "-if-replica-exists" "-if-replica-exists")
-               proc/stdout
-               io/reader)]
-      (run! (fn [x] (println x)) (line-seq rdr)))
+                            db-name bucket db-name endpoint region)))
+        creds       {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
+                           "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
+        restore     (proc/start creds
+                      "litestream" "restore" "-config" config-file db-name)
+        replicate   (proc/start creds
+                      "litestream" "replicate" "-config" config-file)]
+    (log-stdout restore) ;; log initial restore
+    ;; (future (log-stdout replicate))
     ;; Return litestream replication process for monitoring
-    (proc/start {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
-                       "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
-      "litestream" "replicate" "-config" config-file)))
+    replicate))
 
 ;; TODO: build in process monitoring.
-
-(comment
-  ;; Example of how to print process data
-
-  #_{:clj-kondo/ignore [:unresolved-symbol]}
-  (with-open
-    [rdr (-> (proc/start {:env {"AWS_ACCESS_KEY_ID"     s3-access-key-id
-                                "AWS_SECRET_ACCESS_KEY" s3-access-secret-key}}
-               "litestream" "restore" "-config" config-file db-name)
-             proc/stdout
-             io/reader)]
-    (run! (fn [x] (println x)) (line-seq rdr))))
