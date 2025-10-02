@@ -240,10 +240,10 @@ The index will be used if you add the `where entity_type(data) is not null` clau
 
 [Litestream](https://litestream.io/) is an amazing open source SQLite replication tool that lets you to stream backups to S3 compatible object storage.
 
-If litestream is installed on your system ([see installation instructions for details](https://litestream.io/install/ )) you can start replication/ restoration on application start with `sqlite4clj.litestream/litestream-init!`.
+If litestream is installed on your system ([see installation instructions for details](https://litestream.io/install/ )) you can start replication/ restoration on application start with `sqlite4clj.litestream/restore-then-replicate!`.
 
 ```clojure
-(litestream/init-litestream! db-name
+(litestream/restore-then-replicate! db-name
   {:s3-access-key-id     "XXXXXXXXXXXXXXX"
    :s3-access-secret-key "XXXXXXXXXXXXXXX"
    :bucket               "BUCKET NAME"
@@ -255,14 +255,14 @@ By default this will throw an error if backups/replication is not working correc
 
 It will automatically attempt to restore db from replica if db does not already exist. The process is started as a JVM sub process and will be cleaned up when the application terminates.
 
-Returns the java.lang.Process that you can monitor, in the unlikely event that the litestream process crashes you can restart it by running `init-litestream!`.
+Returns the java.lang.Process that you can monitor, in the unlikely event that the litestream process crashes you can restart it by running `restore-then-replicate!`.
 
 sqlite4clj tries to keep its dependencies to a minimum so doesn't support complex yaml generation (which would require adding something like [clj-yaml](https://github.com/clj-commons/clj-yaml) as a dependency). If the built in config generation doesn't support your needs you can supply your own litestream config string using the `config-yml` option. Worth remembering JSON is valid YAML. 
 
 So something like this should work:
 
 ```clojure
-(init-litestream! db-name
+(litestream/restore-then-replicate! db-name
   {:s3-access-key-id     (env :s3-access-key-id)
    :s3-access-secret-key (env :s3-access-secret-key)
    :config-yml
