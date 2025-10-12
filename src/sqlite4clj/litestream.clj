@@ -28,23 +28,7 @@
 
   Returns the java.lang.Process that you can monitor, in the unlikely event
   that the litestream process crashes you can restart it by running
-  `init-litestream!`.
-
-  Litestream backups are path dependent. So if you use a relative path like
-
-  db.db
-
-  You're local db will be different to your production db. As the absolute path
-  as far as litestream is concerned will be different:
-
-  /Users/username/projects/hyperlith/examples/billion_checkboxes_blob/db.db
-
-  vs
-
-  /home/app/db.db
-
-  This is useful if you want to keep dev and prod backups separate.
-  "
+  `init-litestream!`."
   [db-name {:keys [s3-access-key-id s3-access-secret-key
                    bucket endpoint region
                    ;; This allows you to provide your own yml template from
