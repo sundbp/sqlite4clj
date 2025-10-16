@@ -36,6 +36,8 @@
                   "-DSQLITE_OMIT_AUTOINIT"
                   "-DSQLITE_DISABLE_PAGECACHE_OVERFLOW_STATS"
                   "-DSQLITE_ENABLE_STAT4"
+                  "-DSQLITE_ENABLE_RTREE"
+                  "-DSQLITE_ENABLE_FTS5"
                 ]
               );
             })
