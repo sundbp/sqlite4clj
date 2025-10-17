@@ -17,7 +17,7 @@ Currently this library is not on maven so you have to add it via git deps (note:
 ```clojure
 andersmurphy/sqlite4clj
 {:git/url "https://github.com/andersmurphy/sqlite4clj"
- :git/sha "dbcecace4c846763319f8b5fa8b82cd551bb1bde"}
+ :git/sha "9f4ae1e1f31988f28a2c6eac3946107785d831d9"}
 ```
 
 Initialise a db:
