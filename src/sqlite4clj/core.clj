@@ -163,24 +163,29 @@
 
 (defn init-db!
   "A db consists of a read pool of size :pool-size and a write pool of size 1.
-  The same pragma are set for both pools."
-  [url & [{:keys [pool-size pragma] :or {pool-size 4}}]]
-  (let [;; Only one write connection
-        writer
-        (init-pool! url
-          {:pool-size 1
-           :pragma    pragma})
-        ;; Pool of read connections
-        reader
-        (init-pool! url
-          {:read-only true
-           :pool-size pool-size
-           :pragma    pragma})]
-    {:writer writer
-     :reader reader
-     ;; Prevents application function callback pointers from getting
-     ;; garbage collected.
-     :internal {:app-functions (atom {})}}))
+  The same pragma are set for both pools. :zstd-level (between -7 and 22) can
+  be used to set the zstd compression level for encoded EDN blobs."
+  [url & [{:keys [pool-size pragma zstd-level] :or {pool-size 4 zstd-level 3}}]]
+  (assert (< 0 pool-size))
+  (assert (integer? zstd-level))
+  (assert (<= -7 zstd-level 22))
+  (binding [api/*zstd-level* zstd-level]
+    (let [;; Only one write connection
+          writer
+          (init-pool! url
+            {:pool-size 1
+             :pragma    pragma})
+          ;; Pool of read connections
+          reader
+          (init-pool! url
+            {:read-only true
+             :pool-size pool-size
+             :pragma    pragma})]
+      {:writer   writer
+       :reader   reader
+       ;; Prevents application function callback pointers from getting
+       ;; garbage collected.
+       :internal {:app-functions (atom {})}})))
 
 (defn q
   "Run a query against a db. Return nil when no results."

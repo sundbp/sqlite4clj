@@ -31,6 +31,8 @@
 (defn remove-leading-byte [^byte/1 blob]
   (Arrays/copyOfRange blob 1 (count blob)))
 
+(def ^:dynamic *zstd-level* nil)
+
 (defn encode
   "Encode Clojure data and compress it with zstd. Compression quality
   ranges between -7 and 22 and has negligible impact on decompression speed."
@@ -199,7 +201,7 @@
   [pdb idx blob]
   (let [blob   (if (bytes? blob)
                  (add-leading-byte blob RAW_BLOB)
-                 (encode blob 3))
+                 (encode blob *zstd-level*))
         blob-l (count blob)]
     (sqlite3-bind-blob-native pdb idx
       (mem/serialize blob [::mem/array ::mem/byte blob-l])

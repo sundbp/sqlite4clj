@@ -12,9 +12,10 @@
 
 (defonce db
   (d/init-db! "database.db"
-    {:read-only true
-     :pool-size 4
-     :pragma    {:foreign_keys false}}))
+    {:read-only  true
+     :pool-size  4
+     :pragma     {:foreign_keys false}
+     :zstd-level 3}))
 
 (def reader  (db :reader))
 (def writer (db :writer))
@@ -159,8 +160,10 @@
 
   (d/q writer
     ["INSERT INTO blobby (id, data) VALUES (?, ?)"
-     "blob-test5"
+     (str (random-uuid))
      ["some encoded blob"]])
+
+  (d/q reader ["SELECT id, data FROM blobby"])
 
   (d/q reader ["SELECT id, data FROM blobby WHERE id = ?" "blob-test5"])
 
