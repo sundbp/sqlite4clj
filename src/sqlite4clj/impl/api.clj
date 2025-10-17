@@ -28,7 +28,7 @@
     (System/arraycopy blob 0 out 1 (count blob))
     out))
 
-(defn remove-leading-byte [blob]
+(defn remove-leading-byte [^byte/1 blob]
   (Arrays/copyOfRange blob 1 (count blob)))
 
 (defn encode
@@ -286,7 +286,6 @@
   sqlite3_value_bytes
   [::mem/pointer] ::mem/int)
 
-
 (defcfn value-blob
   "sqlite3_value_blob"
   [::mem/pointer] ::mem/pointer
@@ -295,7 +294,7 @@
   (let [result (sqlite3-value-blob-native sqlite-value)]
     (if (mem/null? result)
       nil
-      (let [size (value-bytes sqlite-value)
+      (let [^int size (value-bytes sqlite-value)
             blob (mem/deserialize
                   (mem/reinterpret result size)
                   [::mem/array ::mem/byte size :raw? true])]

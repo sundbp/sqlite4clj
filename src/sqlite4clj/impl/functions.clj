@@ -74,14 +74,14 @@
           argv-segment (mem/reinterpret argv (* argc-int ptr-size))]
       (mapv (fn [i]
               ;; Read each pointer from the array
-              (mem/read-address argv-segment (* i ptr-size)))
+              (mem/read-address argv-segment ^long (* i ptr-size)))
             (range argc-int)))))
 
 (defn value->clj
   "Convert a sqlite3_value to a Clojure value based on its type"
   [sqlite-value]
-  (let [type-code (api/value-type sqlite-value)]
-    (case type-code
+  (let [^int type-code (api/value-type sqlite-value)]
+    (case (int type-code)
       1 (api/value-int sqlite-value)    ;; SQLITE_INTEGER
       2 (api/value-double sqlite-value) ;; SQLITE_FLOAT
       3 (api/value-text sqlite-value)   ;; SQLITE_TEXT
