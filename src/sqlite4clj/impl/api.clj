@@ -4,13 +4,10 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [coffi.ffi :as ffi :refer [defcfn]]
-   [deed.core :as deed]
-   [coffi.mem :as mem])
+   [coffi.mem :as mem]
+   [sqlite4clj.impl.encoding :as enc])
   (:import
-   [java.nio.file Files]
-   [java.util Arrays]
-   [io.airlift.compress.v3.zstd ZstdCompressor ZstdDecompressor
-    ZstdNativeCompressor ZstdNativeDecompressor]))
+   [java.nio.file Files]))
 
 (def SQLITE_UTF8 1)
 (def SQLITE_DETERMINISTIC 0x000000800)
@@ -19,45 +16,6 @@
 (def SQLITE_SUBTYPE 0x000100000)
 (def SQLITE_RESULT_SUBTYPE 0x001000000)
 (def SQLITE_SELFORDER1 0x002000000)
-
-(def RAW_BLOB (byte 0))
-(def ZSTD_ENCODED_BLOB (byte 1))
-
-(defn add-leading-byte [blob leading-byte]
-  (let [out (byte-array (inc (count blob)) [leading-byte])]
-    (System/arraycopy blob 0 out 1 (count blob))
-    out))
-
-(defn remove-leading-byte [^byte/1 blob]
-  (Arrays/copyOfRange blob 1 (count blob)))
-
-(def ^:dynamic *zstd-level* nil)
-
-(defn encode
-  "Encode Clojure data and compress it with zstd. Compression quality
-  ranges between -7 and 22 and has negligible impact on decompression speed."
-  [blob quality]
-  (let [compressor (ZstdNativeCompressor/new (or quality 3))
-        blob       (deed/encode-to-bytes blob)
-        compressed (byte-array
-                     (inc (ZstdCompressor/.maxCompressedLength compressor
-                            (count blob)))
-                     [ZSTD_ENCODED_BLOB])
-        compressed-size
-        (ZstdCompressor/.compress compressor blob 0 (count blob) compressed 1
-          (dec (count compressed)))]
-    (Arrays/copyOfRange compressed 0 (inc compressed-size))))
-
-(defn decode
-  "Decode Clojure data and compress it with zstd."
-  [blob]
-  (let [decompressor (ZstdNativeDecompressor/new)
-        uncompressed (byte-array
-                       (ZstdDecompressor/.getDecompressedSize decompressor
-                         blob 1 (dec (count blob))))]
-    (ZstdDecompressor/.decompress decompressor blob 1 (dec (count blob))
-      uncompressed 0 (count uncompressed))
-    (deed/decode-from uncompressed)))
 
 (defn copy-resource [resource-path output-path]
   (with-open [in  (io/input-stream (io/resource resource-path))
@@ -95,8 +53,8 @@
   (cond
     ;; default to bundled
     (or (nil? src)
-        (= src "bundled")) (load-bundled-library)
-    (= src "system")       (load-system-library)
+      (= src "bundled")) (load-bundled-library)
+    (= src "system")     (load-system-library)
     :else
     (ffi/load-library src)))
 
@@ -134,7 +92,7 @@
     (let [pdb           (mem/alloc-instance ::mem/pointer arena)
           filename-utf8 (String/new (String/.getBytes filename "UTF-8") "UTF-8")
           code          (sqlite3-open-native filename-utf8
-                 pdb flags nil)]
+                          pdb flags nil)]
       (if (sqlite-ok? code)
         (mem/deserialize-from pdb ::mem/pointer)
         (throw (sqlite-ex-info pdb code {:filename filename}))))))
@@ -199,9 +157,7 @@
    ::mem/pointer] ::mem/int
   sqlite3-bind-blob-native
   [pdb idx blob]
-  (let [blob   (if (bytes? blob)
-                 (add-leading-byte blob RAW_BLOB)
-                 (encode blob *zstd-level*))
+  (let [blob   (enc/encode blob)
         blob-l (count blob)]
     (sqlite3-bind-blob-native pdb idx
       (mem/serialize blob [::mem/array ::mem/byte blob-l])
@@ -216,7 +172,7 @@
   sqlite3_column_count
   [::mem/pointer] ::mem/int)
 
-(defcfn column-double 
+(defcfn column-double
   sqlite3_column_double
   [::mem/pointer ::mem/int] ::mem/double)
 
@@ -239,13 +195,10 @@
   [stmt idx]
   (let [result (sqlite3_column_blob-native stmt idx)
         size   (column-bytes stmt idx)
-        blob   (mem/deserialize
-                 (mem/reinterpret result
-                   (mem/size-of [::mem/array ::mem/byte size]))
-                 [::mem/array ::mem/byte size :raw? true])]
-    (if (= (first blob) ZSTD_ENCODED_BLOB)
-      (decode blob)
-      (remove-leading-byte blob))))
+        blob   (.toArray (mem/reinterpret result
+                           (mem/size-of [::mem/array ::mem/byte size]))
+                 java.lang.foreign.ValueLayout/JAVA_BYTE)]
+    (enc/decode blob size)))
 
 (defcfn column-type
   sqlite3_column_type
@@ -297,14 +250,10 @@
     (if (mem/null? result)
       nil
       (let [^int size (value-bytes sqlite-value)
-            blob (mem/deserialize
-                  (mem/reinterpret result size)
-                  [::mem/array ::mem/byte size :raw? true])]
-        (if (and (pos? size) (= (first blob) ZSTD_ENCODED_BLOB))
-          (decode blob)
-          (if (pos? size)
-            (remove-leading-byte blob)
-            (byte-array 0)))))))
+            blob      (.toArray (mem/reinterpret result
+                                  (mem/size-of [::mem/array ::mem/byte size]))
+                        java.lang.foreign.ValueLayout/JAVA_BYTE)]
+        (enc/decode blob size)))))
 
 (defcfn result-text
   "sqlite3_result_text"
@@ -313,9 +262,9 @@
   [context text]
   (let [text-bytes (String/.getBytes (str text) "UTF-8")]
     (sqlite3-result-text-native context
-                                (String/new text-bytes "UTF-8")
-                                (count text-bytes)
-                                sqlite-transient)))
+      (String/new text-bytes "UTF-8")
+      (count text-bytes)
+      sqlite-transient)))
 
 (defcfn result-int
   sqlite3_result_int64
@@ -339,22 +288,20 @@
   [::mem/pointer ::mem/pointer ::mem/int ::mem/pointer] ::mem/void
   sqlite3-result-blob-native
   [context blob]
-  (let [blob (if (bytes? blob)
-               (add-leading-byte blob RAW_BLOB)
-               (encode blob 3))
+  (let [blob   (enc/encode blob)
         blob-l (count blob)]
     (sqlite3-result-blob-native context
-                                (mem/serialize blob [::mem/array ::mem/byte blob-l])
-                                blob-l
-                                sqlite-transient)))
+      (mem/serialize blob [::mem/array ::mem/byte blob-l])
+      blob-l
+      sqlite-transient)))
 
 (defcfn result-error
   "sqlite3_result_error"
   [::mem/pointer ::mem/c-string ::mem/int] ::mem/void
   sqlite3-result-error-native
   [context msg]
-  (let [msg (str msg)
+  (let [msg       (str msg)
         msg-bytes (String/.getBytes msg "UTF-8")]
     (sqlite3-result-error-native context
-                                 (String/new msg-bytes "UTF-8")
-                                 (count msg-bytes))))
+      (String/new msg-bytes "UTF-8")
+      (count msg-bytes))))

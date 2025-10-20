@@ -17,17 +17,17 @@
   [f]
   (let [func      (if (var? f) @f f)
         methods   (->> func
-                       class
-                       .getDeclaredMethods
-                       (map (fn [^Method m]
-                              (vector (.getName m)
-                                      (count (.getParameterTypes m))))))
+                    class
+                    .getDeclaredMethods
+                    (map (fn [^Method m]
+                           (vector (.getName m)
+                             (count (.getParameterTypes m))))))
         var-args? (some #(-> % first #{"getRequiredArity"})
-                        methods)
+                    methods)
         arities   (->> methods
-                       (filter (comp #{"invoke"} first))
-                       (map second)
-                       (sort))]
+                    (filter (comp #{"invoke"} first))
+                    (map second)
+                    (sort))]
     (cond
       (keyword? f)     nil
       var-args?        [:variadic]
@@ -52,8 +52,8 @@
                                           (get flag-map flag)
                                           0))]
                 result))
-            api/SQLITE_UTF8
-            flags)))
+      api/SQLITE_UTF8
+      flags)))
 
 (defn result->result-fn [v]
   (cond
@@ -75,7 +75,7 @@
       (mapv (fn [i]
               ;; Read each pointer from the array
               (mem/read-address argv-segment ^long (* i ptr-size)))
-            (range argc-int)))))
+        (range argc-int)))))
 
 (defn value->clj
   "Convert a sqlite3_value to a Clojure value based on its type"
@@ -102,8 +102,8 @@
       (catch Throwable e
         ;; catch everything to prevent JVM crashes
         (api/result-error context
-                          (or (.getMessage e)
-                              (str "Unexpected " (.getSimpleName (class e)))))))))
+          (or (.getMessage e)
+            (str "Unexpected " (.getSimpleName (class e)))))))))
 
 (defn doto-connections [db f]
   (doseq [pool [(:reader db) (:writer db)]]
@@ -112,13 +112,13 @@
 
 (defn unregister-function-callback [db name arity flags]
   (doto-connections db
-                    (fn [conn]
-                      (let [pdb  (:pdb conn)
-                            ;; "To delete an existing SQL function or aggregate, pass NULL pointers for all three function callbacks."
-                            code (api/create-function-v2 pdb name arity flags mem/null
-                                                         mem/null mem/null mem/null mem/null)]
-                        (when-not (api/sqlite-ok? code)
-                          (throw (api/sqlite-ex-info pdb code {:function name})))))))
+    (fn [conn]
+      (let [pdb  (:pdb conn)
+            ;; "To delete an existing SQL function or aggregate, pass NULL pointers for all three function callbacks."
+            code (api/create-function-v2 pdb name arity flags mem/null
+                   mem/null mem/null mem/null mem/null)]
+        (when-not (api/sqlite-ok? code)
+          (throw (api/sqlite-ex-info pdb code {:function name})))))))
 
 (defn app-functions [db]
   (when-let [fns (get-in db [:internal :app-functions])]
@@ -154,8 +154,8 @@
 
       ;; Single atomic swap - remove arities but keep :meta
       (swap! (get-in db [:internal :app-functions])
-             #(update % name (fn [fn-entry]
-                               (reduce dissoc fn-entry remove-arities)))))))
+        #(update % name (fn [fn-entry]
+                          (reduce dissoc fn-entry remove-arities)))))))
 
 (defn- do-register-function
   "Core registration that handles all arities atomically
@@ -168,36 +168,36 @@
      - watch-key     - optional watch-key for the var"
   [db name f arities flags-bitmask var watch-key]
   (let [registrations (vec
-                       (for [n arities]
-                         (let [arity        (if (= n :variadic) -1 n)
-                               callback     (wrap-scalar-function f)
-                               callback-ptr (mem/serialize callback
-                                                           [::ffi/fn
-                                                            [::mem/pointer ::mem/int ::mem/pointer]
-                                                            ::mem/void
-                                                            :raw-fn? true]
-                                                           (mem/global-arena))]
-                           (doto-connections db
-                                             (fn [conn]
-                                               (let [pdb  (:pdb conn)
-                                                     code (api/create-function-v2 pdb name arity flags-bitmask mem/null
-                                                                                  callback-ptr mem/null mem/null mem/null)]
-                                                 (when-not (api/sqlite-ok? code)
-                                                   (throw (api/sqlite-ex-info pdb code {:function name}))))))
-                           {:arity arity
-                            :data  {:flags        flags-bitmask
-                                    :callback     callback
-                                    :callback-ptr callback-ptr}})))
+                        (for [n arities]
+                          (let [arity        (if (= n :variadic) -1 n)
+                                callback     (wrap-scalar-function f)
+                                callback-ptr (mem/serialize callback
+                                               [::ffi/fn
+                                                [::mem/pointer ::mem/int ::mem/pointer]
+                                                ::mem/void
+                                                :raw-fn? true]
+                                               (mem/global-arena))]
+                            (doto-connections db
+                              (fn [conn]
+                                (let [pdb  (:pdb conn)
+                                      code (api/create-function-v2 pdb name arity flags-bitmask mem/null
+                                             callback-ptr mem/null mem/null mem/null)]
+                                  (when-not (api/sqlite-ok? code)
+                                    (throw (api/sqlite-ex-info pdb code {:function name}))))))
+                            {:arity arity
+                             :data  {:flags        flags-bitmask
+                                     :callback     callback
+                                     :callback-ptr callback-ptr}})))
         metadata      (when var
                         {:var var :watch-key watch-key})]
     (swap! (get-in db [:internal :app-functions])
-           update name
-           (fn [existing]
-             (let [new-arities (into {}
-                                     (for [{:keys [arity data]} registrations]
-                                       [arity data]))]
-               (cond-> (merge existing new-arities)
-                 metadata (assoc :meta metadata)))))))
+      update name
+      (fn [existing]
+        (let [new-arities (into {}
+                            (for [{:keys [arity data]} registrations]
+                              [arity data]))]
+          (cond-> (merge existing new-arities)
+            metadata (assoc :meta metadata)))))))
 
 (defn register-function
   [db name f & {:keys [arity] :as opts}]
@@ -251,7 +251,7 @@
            (remove-watch var watch-key)))
 
        (swap! (get-in db [:internal :app-functions])
-              (if remove-all?
-                #(dissoc % name)
-                #(update % name (fn [fn-entry]
-                                  (reduce dissoc fn-entry remove-arities)))))))))
+         (if remove-all?
+           #(dissoc % name)
+           #(update % name (fn [fn-entry]
+                             (reduce dissoc fn-entry remove-arities)))))))))

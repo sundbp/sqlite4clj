@@ -109,19 +109,9 @@ The connection pools are not thread pools, they use a `LinkedBlockingQueue` to l
 
 The two main speedups are from caching query statements at a connection level and using inline caching of column reading functions.
 
-## BLOB type
+## Automatic EDN encoding/decoding
 
-SQLite's blob types are incredibly flexible. But, require establishing some conventions. For sqlite4clj the conventions are as follows:
-
-- When inserting/updating a non `byte/1` (byte array) it will attempt to serialize the Clojure/Java data using [deed](https://github.com/igrishaev/deed). It will then compress the data using ZSTD. The first byte of the blob will be `ZSTD_ENCODED_BLOB` (`1`).
-- When inserting/updating a `byte/1` (byte array) it will insert a leading byte that will be `RAW_BLOB` (`0`).
-
-- When reading a `ZSTD_ENCODED_BLOB` the value will be decompressed and decoded automatically.
-- When reading a `RAW_BLOB` the leading byte (`RAW_BLOB`) will be stripped before being returned.
-
-## Automatic edn encoding/decoding
-
-sqlite4clj automatically encodes (and zstd compressed) any edn object you pass it:
+sqlite4clj automatically encodes (and zstd compressed) any EDN object you pass it:
 
 ```clojure
 (d/q writer
@@ -138,7 +128,9 @@ sqlite4clj automatically encodes (and zstd compressed) any edn object you pass i
 ;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
 ```
 
-This effectively lets you use SQLite as an edn document store. Check out the [deed](https://github.com/igrishaev/deed)  for the full list of supported Java/Clojure encodings.
+This effectively lets you use SQLite as an EDN document store.
+
+Encoding is done with [fast-edn](https://github.com/tonsky/fast-edn) as text and then converted into bytes, before being compressed (depending on the size). From my testing this was faster than both [deed](https://github.com/igrishaev/deed) and [nippy](https://github.com/taoensso/nippy) despite being a text format. Being a text format it is stable and can be swapped out for faster EDN text serialises without breaking changes. Of course, this also means only EDN data is support and not arbitrary Java classes. You can extend the format by passing readers at database initialisation with the `:edn-readers` key.
 
 ## Application functions
 
@@ -157,11 +149,11 @@ Declaring and using an application function:
 ;; [["46536a4a-0b1e-4749-9c01-f44f73de3b91" {:type "foo", :a 3, :b 3}]]
 ```
 
-When dealing with columns that are encoded edn blobs they will automatically decoded.
+When dealing with columns that are encoded EDN blobs they will automatically decoded.
 
 ## Indexing on encoded edn blobs
 
-Because SQLite supports [Indexes On Expressions](https://www.sqlite.org/expridx.html) and [Partial Indexes](https://www.sqlite.org/partialindex.html) we can easily index on any arbitrary encoded edn data.
+Because SQLite supports [Indexes On Expressions](https://www.sqlite.org/expridx.html) and [Partial Indexes](https://www.sqlite.org/partialindex.html) we can easily index on any arbitrary encoded EDN data.
 
 Using an expression index:
 
@@ -182,7 +174,7 @@ WHERE entity_type(data) IS NOT NULL"])
 ;; [[3 0 62 "SEARCH entity USING INDEX entity_type_idx (<expr>=?)"]]
 ```
 
-## Using partial indexes to sort on encoded edn blobs
+## Using partial indexes to sort on encoded EDN blobs
 
 A partial index is an index over a subset of the rows of a table. This leads to smaller and faster indexes (see  [Existence Based Processing](https://www.dataorienteddesign.com/dodmain/node4.html)) when only a subset of the rows have a value you care about.
 
@@ -251,13 +243,13 @@ If litestream is installed on your system ([see installation instructions for de
    :region               "REGION"})
 ```
 
-By default this will throw an error if backups/replication is not working correctly (to crash your application). 
+By default this will throw an error if backups/replication is not working correctly (to crash your application).
 
 It will automatically attempt to restore db from replica if db does not already exist. The process is started as a JVM sub process and will be cleaned up when the application terminates.
 
 Returns the java.lang.Process that you can monitor, in the unlikely event that the litestream process crashes you can restart it by running `restore-then-replicate!`.
 
-sqlite4clj tries to keep its dependencies to a minimum so doesn't support complex yaml generation (which would require adding something like [clj-yaml](https://github.com/clj-commons/clj-yaml) as a dependency). If the built in config generation doesn't support your needs you can supply your own litestream config string using the `config-yml` option. Worth remembering JSON is valid YAML. 
+sqlite4clj tries to keep its dependencies to a minimum so doesn't support complex yaml generation (which would require adding something like [clj-yaml](https://github.com/clj-commons/clj-yaml) as a dependency). If the built in config generation doesn't support your needs you can supply your own litestream config string using the `config-yml` option. Worth remembering JSON is valid YAML.
 
 So something like this should work:
 

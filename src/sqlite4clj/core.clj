@@ -3,6 +3,7 @@
   and prepared statement caching."
   (:require
    [sqlite4clj.impl.api :as api]
+   [sqlite4clj.impl.encoding :as enc]
    [sqlite4clj.impl.functions :as funcs]
    [clojure.core.cache.wrapped :as cache])
   (:import
@@ -109,19 +110,19 @@
                                  :params (subvec query 1)})))))
 
 (def default-pragma
-  {:cache_size   15625
-   :page_size    4096
-   :journal_mode "WAL"
-   :synchronous  "NORMAL"
-   :temp_store   "MEMORY"
-   :foreign_keys true
+  {:cache_size         15625
+   :page_size          4096
+   :journal_mode       "WAL"
+   :synchronous        "NORMAL"
+   :temp_store         "MEMORY"
+   :foreign_keys       true
    ;; Because of WAL and a single writer at the application level
    ;; SQLITE_BUSY error should almost never happen, see:
    ;; https://sqlite.org/wal.html#sometimes_queries_return_sqlite_busy_in_wal_mode
    ;; However, sometime when using litestream for backups it can happen.
    ;; So we set it to the recommended value see:
    ;;  https://litestream.io/tips/#busy-timeout
-   :busy_timeout 5000
+   :busy_timeout       5000
    ;; Litestream recommends disabling autocheckpointing under high write loads
    ;; https://litestream.io/tips/#disable-autocheckpoints-for-high-write-load-servers
    :wal_autocheckpoint 0
@@ -150,13 +151,14 @@
     conn))
 
 (defn init-pool!
-  [db-name & [{:keys [pool-size pragma read-only]
+  [db-name & [{:keys [pool-size pragma read-only zstd-level]
                :or   {pool-size 4}}]]
   (let [conns (repeatedly pool-size
                 (fn [] (new-conn! db-name pragma read-only)))
         pool  (LinkedBlockingQueue/new ^int pool-size)]
     (run! #(BlockingQueue/.add pool %) conns)
-    {:conn-pool pool
+    {:conn-pool   pool
+     :zstd-level  zstd-level
      :connections conns
      :close
      (fn [] (run! (fn [conn] (api/close (:pdb conn))) conns))}))
@@ -165,37 +167,42 @@
   "A db consists of a read pool of size :pool-size and a write pool of size 1.
   The same pragma are set for both pools. :zstd-level (between -7 and 22) can
   be used to set the zstd compression level for encoded EDN blobs."
-  [url & [{:keys [pool-size pragma zstd-level] :or {pool-size 4 zstd-level 3}}]]
+  [url & [{:keys [pool-size pragma zstd-level edn-readers]
+           :or {pool-size 4 zstd-level 3}}]]
   (assert (< 0 pool-size))
   (assert (integer? zstd-level))
   (assert (<= -7 zstd-level 22))
-  (binding [api/*zstd-level* zstd-level]
-    (let [;; Only one write connection
-          writer
-          (init-pool! url
-            {:pool-size 1
-             :pragma    pragma})
-          ;; Pool of read connections
-          reader
-          (init-pool! url
-            {:read-only true
-             :pool-size pool-size
-             :pragma    pragma})]
-      {:writer   writer
-       :reader   reader
-       ;; Prevents application function callback pointers from getting
-       ;; garbage collected.
-       :internal {:app-functions (atom {})}})))
+  (let [;; Only one write connection
+        writer
+        (init-pool! url
+          {:pool-size  1
+           :pragma     pragma
+           :zstd-level zstd-level
+           :edn-readers edn-readers})
+        ;; Pool of read connections
+        reader
+        (init-pool! url
+          {:read-only true
+           :pool-size pool-size
+           :pragma    pragma
+           :edn-readers edn-readers})]
+    {:writer   writer
+     :reader   reader
+     ;; Prevents application function callback pointers from getting
+     ;; garbage collected.
+     :internal {:app-functions (atom {})}}))
 
 (defn q
   "Run a query against a db. Return nil when no results."
-  [{:keys [conn-pool] :as tx} query]
+  [{:keys [conn-pool zstd-level edn-readers] :as tx} query]
   (if conn-pool
-    (let [conn (BlockingQueue/.take conn-pool)]
-      (try
-        (q* conn query)
-        ;; Always return the conn even on error
-        (finally (BlockingQueue/.offer conn-pool conn))))
+    (binding [enc/*zstd-level* zstd-level
+              enc/*edn-readers* edn-readers]
+      (let [conn (BlockingQueue/.take conn-pool)]
+        (try
+          (q* conn query)
+          ;; Always return the conn even on error
+          (finally (BlockingQueue/.offer conn-pool conn)))))
     ;; If we don't have a connection pool then we have a tx.
     (q* tx query)))
 
@@ -215,26 +222,32 @@
 (defmacro with-read-tx
   {:clj-kondo/lint-as 'clojure.core/with-open}
   [[tx db] & body]
-  `(let [conn-pool# (:conn-pool ~db)
-         ~tx        (BlockingQueue/.take conn-pool#)]
-     (try
-       (q ~tx ["BEGIN DEFERRED"])
-       ~@body
-       (finally
-         (q ~tx ["COMMIT"])
-         (BlockingQueue/.offer conn-pool# ~tx)))))
+  `(let [conn-pool#   (:conn-pool ~db)
+         zstd-level#  (:zstd-level ~db)
+         edn-readers# (:edn-reader ~db)
+         ~tx          (BlockingQueue/.take conn-pool#)]
+     (binding [enc/*zstd-level* zstd-level#
+               enc/*edn-readers* edn-readers#]
+       (try
+         (q ~tx ["BEGIN DEFERRED"])
+         ~@body
+         (finally
+           (q ~tx ["COMMIT"])
+           (BlockingQueue/.offer conn-pool# ~tx))))))
 
 (defmacro with-write-tx
   {:clj-kondo/lint-as 'clojure.core/with-open}
   [[tx db] & body]
-  `(let [conn-pool# (:conn-pool ~db)
-         ~tx        (BlockingQueue/.take conn-pool#)]
-     (try
-       (q ~tx ["BEGIN IMMEDIATE"])
-       ~@body
-       (finally
-         (q ~tx ["COMMIT"])
-         (BlockingQueue/.offer conn-pool# ~tx)))))
+  `(let [conn-pool#  (:conn-pool ~db)
+         zstd-level# (:zstd-level ~db)
+         ~tx         (BlockingQueue/.take conn-pool#)]
+     (binding [enc/*zstd-level* zstd-level#]
+       (try
+         (q ~tx ["BEGIN IMMEDIATE"])
+         ~@body
+         (finally
+           (q ~tx ["COMMIT"])
+           (BlockingQueue/.offer conn-pool# ~tx))))))
 
 ;; WAL + single writer enforced at the application layer means you don't need
 ;; to handle SQLITE_BUSY or SQLITE_LOCKED.
