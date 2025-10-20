@@ -24,7 +24,8 @@
   ranges between -7 and 22 and has almost no impact on decompression speed."
   [blob]
   (assert (not= *zstd-level* nil))
-  (let [blob      (String/.getBytes (str blob))
+  (let [blob      (binding [*print-length* nil]
+                    (String/.getBytes (str blob)))
         blob-size (count blob)]
     (add-leading-byte blob ENCODED_BLOB)
     (if (> blob-size 1000)
@@ -52,17 +53,19 @@
                        (ZstdDecompressor/.getDecompressedSize decompressor
                          blob 1 (dec (count blob))))]
     (ZstdDecompressor/.decompress decompressor blob 1 (dec (count blob))
-      uncompressed 0 (count uncompressed))
-    ;; This is faster than using read-once
-    (edn/read-string {:readers *edn-readers*}
-      (String.  uncompressed))))
+      uncompressed 0 (count uncompressed))    
+    (binding [*print-length* nil]
+      ;; This is faster than using read-once
+      (edn/read-string {:readers *edn-readers*}
+        (String.  uncompressed)))))
 
 (defn- decode-edn
   "Decode Clojure data."
   [blob]
   ;; This is faster than using read-once
-  (edn/read-string {:readers *edn-readers*}
-    (String. (remove-leading-byte blob))))
+  (binding [*print-length* nil]
+    (edn/read-string {:readers *edn-readers*}
+      (String. (remove-leading-byte blob)))))
 
 ;; -----------------------------
 ;; Public API
