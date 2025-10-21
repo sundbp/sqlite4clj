@@ -6,7 +6,7 @@ Conceptually sqlite4clj is inspired by sqlite4java a sqlite library that doesn't
 
 By using [coffi](https://github.com/IGJoshua/coffi) to interface with SQLite's C API directly with FFI we bypass the need for: [sqlite-jdbc](https://github.com/xerial/sqlite-jdbc), [hikariCP](https://github.com/brettwooldridge/HikariCP) and [next.jdbc](https://github.com/seancorfield/next-jdbc). This massively reduces the amount of code that needs to be maintained (and a much smaller jar), allows us to use Clojure to interface with SQLite directly. It also makes it easier to add SQLite specific features. In my case I was looking to cache prepared statement for each connection (which is not possible with HikariCP) but can lead to considerable performance gains on complex queries.
 
-This also frees up scope for common things like binary encoding and decoding as well as compression decompression to leverage SQLite's blob type.
+This also frees up scope for common things like binary encoding and decoding to leverage SQLite's blob type.
 
 Currently, this project is very much a proof of concept. But, I'm hoping to ultimately make it production ready.
 
@@ -111,7 +111,7 @@ The two main speedups are from caching query statements at a connection level an
 
 ## Automatic EDN encoding/decoding
 
-sqlite4clj automatically encodes (and zstd compressed) any EDN object you pass it:
+sqlite4clj automatically encodes any EDN object you pass it:
 
 ```clojure
 (d/q writer
@@ -120,7 +120,7 @@ sqlite4clj automatically encodes (and zstd compressed) any EDN object you pass i
 (d/q writer
     ["INSERT INTO entity (id, data) VALUES (?, ?)"
      (str (random-uuid))
-     ;; this map will be encoded and compressed automatically
+     ;; this map will be encoded automatically
      {:type "foo" :a (rand-int 10) :b (rand-int 10)}])
 
 (d/q reader ["select * from entity"])
@@ -130,7 +130,7 @@ sqlite4clj automatically encodes (and zstd compressed) any EDN object you pass i
 
 This effectively lets you use SQLite as an EDN document store.
 
-Encoding is done with [fast-edn](https://github.com/tonsky/fast-edn) as text and then converted into bytes, before being compressed (depending on the size). From my testing this was faster than both [deed](https://github.com/igrishaev/deed) and [nippy](https://github.com/taoensso/nippy) despite being a text format. Being a text format it is stable and can be swapped out for faster EDN text serialises without breaking changes. Of course, this also means only EDN data is support and not arbitrary Java classes.
+Encoding is done with [fast-edn](https://github.com/tonsky/fast-edn) as text and then converted into bytes. From my testing this was faster than both [deed](https://github.com/igrishaev/deed) and [nippy](https://github.com/taoensso/nippy) despite being a text format. Being a text format it is stable and can be swapped out for faster EDN text serialises without breaking changes. Of course, this also means only EDN data is support and not arbitrary Java classes.
 
 ## Application functions
 

@@ -15,8 +15,7 @@
   (d/init-db! "database.db"
     {:read-only  true
      :pool-size  4
-     :pragma     {:foreign_keys false}
-     :zstd-level 3}))
+     :pragma     {:foreign_keys false}}))
 
 (def reader  (db :reader))
 (def writer (db :writer))
@@ -169,7 +168,7 @@
   (d/q reader ["SELECT id, data FROM blobby WHERE id = ?" "blob-test5"])
   )
 
-(comment ;; compressed encoded blob vs regular table
+(comment ;; encoded blob vs regular table
 
   (d/q writer
     ["CREATE TABLE IF NOT EXISTS test_1(id INT PRIMARY KEY, data BLOB)"])
@@ -246,22 +245,6 @@
       first
       edn/read-string))
 
-  )
-
-(comment ;; text compression kicks in at 1k
-  (d/q writer
-    ["CREATE TABLE IF NOT EXISTS test_5(id INT PRIMARY KEY, data BLOB)"])
-  (def thousandk
-    (mapv (fn [id] {:id       id :email "bob@foobar.com"
-                   :username "escalibardarian"})
-      (range 0 100)))
-
-  (d/q writer
-    ["INSERT INTO test_5 (id, data) VALUES (?, ?)"
-     1 thousandk])
-  (user/bench
-    (d/q reader ["select data from test_5"]))
-  
   )
 
 (comment ;; Profiling
