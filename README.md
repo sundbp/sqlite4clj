@@ -17,7 +17,7 @@ Currently this library is not on maven so you have to add it via git deps (note:
 ```clojure
 andersmurphy/sqlite4clj
 {:git/url "https://github.com/andersmurphy/sqlite4clj"
- :git/sha "9579f197db4349f1871649b271886d1d6f10b962"}
+ :git/sha "53d80b6ff90b5ffb936a7ddbd1df1fd6c417e2ce"}
 ```
 
 Initialise a db:
@@ -130,7 +130,7 @@ sqlite4clj automatically encodes (and zstd compressed) any EDN object you pass i
 
 This effectively lets you use SQLite as an EDN document store.
 
-Encoding is done with [fast-edn](https://github.com/tonsky/fast-edn) as text and then converted into bytes, before being compressed (depending on the size). From my testing this was faster than both [deed](https://github.com/igrishaev/deed) and [nippy](https://github.com/taoensso/nippy) despite being a text format. Being a text format it is stable and can be swapped out for faster EDN text serialises without breaking changes. Of course, this also means only EDN data is support and not arbitrary Java classes. You can extend the format by passing readers at database initialisation with the `:edn-readers` key.
+Encoding is done with [fast-edn](https://github.com/tonsky/fast-edn) as text and then converted into bytes, before being compressed (depending on the size). From my testing this was faster than both [deed](https://github.com/igrishaev/deed) and [nippy](https://github.com/taoensso/nippy) despite being a text format. Being a text format it is stable and can be swapped out for faster EDN text serialises without breaking changes. Of course, this also means only EDN data is support and not arbitrary Java classes.
 
 ## Application functions
 
