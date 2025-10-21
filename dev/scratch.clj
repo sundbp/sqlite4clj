@@ -1,10 +1,8 @@
 (ns scratch
   (:require [sqlite4clj.core :as d]
             [clj-async-profiler.core :as prof]
-            [fast-edn.core :as edn]
-            [sqlite4clj.impl.api :as api])
-  (:import
-   (java.util.concurrent Executors)))
+            [fast-edn.core :as edn])
+  (:import (java.util.concurrent Executors)))
 
 ;; Make futures use virtual threads
 (set-agent-send-executor!
@@ -218,6 +216,10 @@
     ;; 1.206098 ms
     ;; 238.893356 µs
     ;; 61.222818 µs
+    ;; 58.882514 µs
+    ;; 54.009261 µs
+    ;; 52.006687 µs
+    ;; 51.460267 µs
     (d/q reader ["select data from test_1"]))
 
   (user/bench ;; 20.496617 µs
@@ -225,10 +227,9 @@
       (mapv (fn [[id email username]]
               {:id id :email email :username username}))))
 
-  (+ (- 27.778821 12.411071) 43.204357)
-
   ;; Raw get bytes
-  (user/bench ;; 27.778821 µs
+  (user/bench
+    ;; 18.753884 µs
     (->> (d/q reader ["select * from test_4"])))
 
   ;; Raw get text
@@ -238,6 +239,12 @@
   (user/bench ;; 43.204357 µs
     (->> (d/q reader ["select data from test_3"])
       (mapv edn/read-string)))
+
+  ;; Concat madness
+  (user/bench ;; 30.865782 µs
+    (->> (d/q reader ["select concat('[', group_concat(data), ']') from test_3 limit 1"])
+      first
+      edn/read-string))
 
   )
 
@@ -279,3 +286,4 @@
   ;;
   )
 
+  

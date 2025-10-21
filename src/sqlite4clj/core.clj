@@ -3,7 +3,6 @@
   and prepared statement caching."
   (:require
    [sqlite4clj.impl.api :as api]
-   [sqlite4clj.impl.encoding :as enc]
    [sqlite4clj.impl.functions :as funcs]
    [clojure.core.cache.wrapped :as cache])
   (:import
@@ -151,41 +150,33 @@
     conn))
 
 (defn init-pool!
-  [db-name & [{:keys [pool-size pragma read-only zstd-level]
+  [db-name & [{:keys [pool-size pragma read-only]
                :or   {pool-size 4}}]]
   (let [conns (repeatedly pool-size
                 (fn [] (new-conn! db-name pragma read-only)))
         pool  (LinkedBlockingQueue/new ^int pool-size)]
     (run! #(BlockingQueue/.add pool %) conns)
     {:conn-pool   pool
-     :zstd-level  zstd-level
      :connections conns
      :close
      (fn [] (run! (fn [conn] (api/close (:pdb conn))) conns))}))
 
 (defn init-db!
   "A db consists of a read pool of size :pool-size and a write pool of size 1.
-  The same pragma are set for both pools. :zstd-level (between -7 and 22) can
-  be used to set the zstd compression level for encoded EDN blobs."
-  [url & [{:keys [pool-size pragma zstd-level edn-readers]
-           :or {pool-size 4 zstd-level 3}}]]
+  The same pragma are set for both pools."
+  [url & [{:keys [pool-size pragma ] :or {pool-size 4}}]]
   (assert (< 0 pool-size))
-  (assert (integer? zstd-level))
-  (assert (<= -7 zstd-level 22))
   (let [;; Only one write connection
         writer
         (init-pool! url
           {:pool-size  1
-           :pragma     pragma
-           :zstd-level zstd-level
-           :edn-readers edn-readers})
+           :pragma     pragma})
         ;; Pool of read connections
         reader
         (init-pool! url
           {:read-only true
            :pool-size pool-size
-           :pragma    pragma
-           :edn-readers edn-readers})]
+           :pragma    pragma})]
     {:writer   writer
      :reader   reader
      ;; Prevents application function callback pointers from getting
@@ -194,10 +185,9 @@
 
 (defn q
   "Run a query against a db. Return nil when no results."
-  [{:keys [conn-pool zstd-level edn-readers] :as tx} query]
+  [{:keys [conn-pool] :as tx} query]
   (if conn-pool
-    (binding [enc/*zstd-level* zstd-level
-              enc/*edn-readers* edn-readers]
+    (binding [*print-length*    nil]
       (let [conn (BlockingQueue/.take conn-pool)]
         (try
           (q* conn query)
@@ -222,12 +212,9 @@
 (defmacro with-read-tx
   {:clj-kondo/lint-as 'clojure.core/with-open}
   [[tx db] & body]
-  `(let [conn-pool#   (:conn-pool ~db)
-         zstd-level#  (:zstd-level ~db)
-         edn-readers# (:edn-reader ~db)
-         ~tx          (BlockingQueue/.take conn-pool#)]
-     (binding [enc/*zstd-level* zstd-level#
-               enc/*edn-readers* edn-readers#]
+  `(let [conn-pool# (:conn-pool ~db)
+         ~tx        (BlockingQueue/.take conn-pool#)]
+     (binding [*print-length* nil]
        (try
          (q ~tx ["BEGIN DEFERRED"])
          ~@body
@@ -238,10 +225,9 @@
 (defmacro with-write-tx
   {:clj-kondo/lint-as 'clojure.core/with-open}
   [[tx db] & body]
-  `(let [conn-pool#  (:conn-pool ~db)
-         zstd-level# (:zstd-level ~db)
-         ~tx         (BlockingQueue/.take conn-pool#)]
-     (binding [enc/*zstd-level* zstd-level#]
+  `(let [conn-pool# (:conn-pool ~db)
+         ~tx        (BlockingQueue/.take conn-pool#)]
+     (binding [*print-length* nil]
        (try
          (q ~tx ["BEGIN IMMEDIATE"])
          ~@body

@@ -1,29 +1,26 @@
 (ns sqlite4clj.impl.encoding
-  (:require [fast-edn.core :as edn])
-  (:import [java.util Arrays]
-           [io.airlift.compress.v3.zstd ZstdCompressor ZstdDecompressor
-            ZstdNativeCompressor ZstdNativeDecompressor]))
+  (:require [coffi.mem :as mem]
+            [fast-edn.core :as edn])
+  (:import [io.airlift.compress.v3.zstd
+            ZstdCompressor
+            ZstdDecompressor
+            ZstdNativeCompressor
+            ZstdNativeDecompressor]
+           [java.lang.foreign MemorySegment]
+           [java.util Arrays]))
 
 (def RAW_BLOB (byte 0))
 (def ZSTD_ENCODED_BLOB (byte 1))
 (def ENCODED_BLOB (byte 2))
-
-(def ^:dynamic *zstd-level* nil)
-(def ^:dynamic *edn-readers* nil)
 
 (defn- add-leading-byte ^byte/1 [blob leading-byte]
   (let [out (byte-array (inc (count blob)) [leading-byte])]
     (System/arraycopy blob 0 out 1 (count blob))
     out))
 
-(defn- remove-leading-byte ^byte/1 [^byte/1 blob]
-  (Arrays/copyOfRange blob 1 (count blob)))
-
 (defn- encode-edn
-  "Encode Clojure data and compress it with zstd. Compression quality
-  ranges between -7 and 22 and has almost no impact on decompression speed."
+  "Encode Clojure data and compress it with zstd."
   [blob]
-  (assert (not= *zstd-level* nil))
   (let [blob      (binding [*print-length* nil]
                     (String/.getBytes (str blob)))
         blob-size (count blob)]
@@ -31,7 +28,9 @@
     (if (> blob-size 1000)
       ;; ZSTD is only worth it when blobs get to around 1kb see:
       ;; https://github.com/facebook/zstd/issues/1134
-      (let [compressor (ZstdNativeCompressor/new *zstd-level*)
+      ;; Compression level 3 is a good balance between speed
+      ;; and compression
+      (let [compressor (ZstdNativeCompressor/new 3)
             compressed
             (byte-array
               (inc (ZstdCompressor/.maxCompressedLength compressor
@@ -47,25 +46,25 @@
 
 (defn- decode-zstd-edn
   "Decode Clojure data and decompress it with zstd."
-  [blob]
-  (let [decompressor (ZstdNativeDecompressor/new)
+  [^MemorySegment blob]
+  ;; TODO: this compression library does not have a getDecompressedSize
+  ;; function that is accessible for the MemorySegment API.
+  (let [blob         (.toArray blob java.lang.foreign.ValueLayout/JAVA_BYTE)
+        decompressor (ZstdNativeDecompressor/new)
         uncompressed (byte-array
                        (ZstdDecompressor/.getDecompressedSize decompressor
-                         blob 1 (dec (count blob))))]
-    (ZstdDecompressor/.decompress decompressor blob 1 (dec (count blob))
-      uncompressed 0 (count uncompressed))    
-    (binding [*print-length* nil]
-      ;; This is faster than using read-once
-      (edn/read-string {:readers *edn-readers*}
-        (String.  uncompressed)))))
+                         blob 0 (count blob)))]
+    (ZstdDecompressor/.decompress decompressor blob 0 (count blob)
+      uncompressed 0 (count uncompressed))
+    ;; This is faster than using read-once
+    (edn/read-string (String. uncompressed))))
 
 (defn- decode-edn
   "Decode Clojure data."
-  [blob]
+  [^MemorySegment blob]
   ;; This is faster than using read-once
-  (binding [*print-length* nil]
-    (edn/read-string {:readers *edn-readers*}
-      (String. (remove-leading-byte blob)))))
+  (edn/read-string
+    (.getString (.reinterpret ^MemorySegment blob Integer/MAX_VALUE) 0)))
 
 ;; -----------------------------
 ;; Public API
@@ -78,9 +77,12 @@
 (defn decode [blob size]
   (if (pos? size)
     ;; case does not work with bytes!
-    (condp = (first blob)      
-      ENCODED_BLOB      (decode-edn blob)
-      ZSTD_ENCODED_BLOB (decode-zstd-edn blob)
-      ;; Otherwise
-      (remove-leading-byte blob))
+    (do
+      (let [f-byte (mem/read-byte blob)
+            blob   (mem/slice blob 1)]
+        (condp = f-byte
+          ENCODED_BLOB      (decode-edn blob)
+          ZSTD_ENCODED_BLOB (decode-zstd-edn blob)
+          ;; Otherwise
+          (.toArray blob java.lang.foreign.ValueLayout/JAVA_BYTE))))
     (byte-array 0)))

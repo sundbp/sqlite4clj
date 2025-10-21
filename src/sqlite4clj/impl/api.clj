@@ -193,12 +193,11 @@
   [::mem/pointer ::mem/int] ::mem/pointer
   sqlite3_column_blob-native
   [stmt idx]
-  (let [result (sqlite3_column_blob-native stmt idx)
-        size   (column-bytes stmt idx)
-        blob   (.toArray (mem/reinterpret result
-                           (mem/size-of [::mem/array ::mem/byte size]))
-                 java.lang.foreign.ValueLayout/JAVA_BYTE)]
-    (enc/decode blob size)))
+  (with-open [arena (mem/confined-arena)]
+    (let [result (sqlite3_column_blob-native stmt idx)
+          size   (column-bytes stmt idx)
+          blob   (mem/reinterpret result size arena)]
+      (enc/decode blob size))))
 
 (defcfn column-type
   sqlite3_column_type
@@ -249,11 +248,10 @@
   (let [result (sqlite3-value-blob-native sqlite-value)]
     (if (mem/null? result)
       nil
-      (let [^int size (value-bytes sqlite-value)
-            blob      (.toArray (mem/reinterpret result
-                                  (mem/size-of [::mem/array ::mem/byte size]))
-                        java.lang.foreign.ValueLayout/JAVA_BYTE)]
-        (enc/decode blob size)))))
+      (with-open [arena (mem/confined-arena)]
+        (let [^int size (value-bytes sqlite-value)
+              blob      (mem/reinterpret result size arena)]
+          (enc/decode blob size))))))
 
 (defcfn result-text
   "sqlite3_result_text"
