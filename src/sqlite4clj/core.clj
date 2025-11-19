@@ -210,6 +210,7 @@
       (if (> n-conn n) (recur (inc n)) n))))
 
 (defmacro with-read-tx
+  "Wrap series of queries in a read transaction."
   {:clj-kondo/lint-as 'clojure.core/with-open}
   [[tx db] & body]
   `(let [conn-pool# (:conn-pool ~db)
@@ -223,6 +224,7 @@
            (BlockingQueue/.offer conn-pool# ~tx))))))
 
 (defmacro with-write-tx
+  "Wrap series of queries in a write transaction."
   {:clj-kondo/lint-as 'clojure.core/with-open}
   [[tx db] & body]
   `(let [conn-pool# (:conn-pool ~db)
@@ -233,6 +235,19 @@
          ~@body
          (finally
            (q ~tx ["COMMIT"])
+           (BlockingQueue/.offer conn-pool# ~tx))))))
+
+(defmacro with-conn
+  "Use the same connection for a series of queries (not a transaction) without
+  returning it to the pool until the end."
+  {:clj-kondo/lint-as 'clojure.core/with-open}
+  [[tx db] & body]
+  `(let [conn-pool# (:conn-pool ~db)
+         ~tx        (BlockingQueue/.take conn-pool#)]
+     (binding [*print-length* nil]
+       (try
+         ~@body
+         (finally
            (BlockingQueue/.offer conn-pool# ~tx))))))
 
 ;; WAL + single writer enforced at the application layer means you don't need
