@@ -38,109 +38,48 @@
 
   (d/q reader ["pragma wal;" "pragma wal;"])
 
-  (time
-    (->> (d/q reader ["SELECT chunk_id, state FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                      1978 3955 5932 1979 3956 5933 1980 3957 5934])
-      (mapv
-        (fn [[chunk-id state]] {:chunk-id chunk-id :state state}))))
-
-  (d/q reader ["INSERT INTO session (id, checks) VALUES ('foo', 1)"])
-
-  (time
-    (->> (mapv
-           (fn [n]
-             (future
-               (d/q reader
-                 ["SELECT chunk_id, JSON_GROUP_ARRAY(state) AS chunk_cells FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)  GROUP BY chunk_id" 1978 3955 5932 1979 3956 5933 1980 3957 5934])))
-           (range 0 2000))
-      (run! (fn [x] @x))))
-
-  (user/bench
-    (->> (mapv
-           (fn [n]
-             (future
-               (do
-                 (d/q reader ["SELECT chunk_id FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                              (+ n 1978)
-                              (+ n 3955)
-                              (+ n 5932)
-                              (+ n 1979)
-                              (+ n 956)
-                              (+ n 5933)
-                              (+ n 1980)
-                              (+ n 3957)
-                              (+ n 5934)])
-                 nil)))
-           (range 0 4000))
-      (run! (fn [x] @x))))
-
-  (user/bench
-    ;; Execution time mean : 455.139383 µs
-    ;; Execution time mean : 345.804480 µs
-    ;; Execution time mean : 187.652161 µs
-    (d/q reader
-      ["SELECT chunk_id, state FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-       1978 3955 5932 1979 3956 5933 1980 3957 5934]))
-
-  (user/bench
-    (->> ;; Execution time mean : 131.101111 µs
-      (d/q reader
-        ["SELECT chunk_id FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-         1978 3955 5932 1979 3956 5933 1980 3957 5934])))
-
-  (user/bench
-    (->> (d/q reader
-           ["SELECT chunk_id, state FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            1978 3955 5932 1979 3956 5933 1980 3957 5934])
-      (mapv (fn [[chunk-id state]] {:chunk-id chunk-id :state state}))))
-
-  (user/bench
-    (d/q reader
-      ["SELECT chunk_id, JSON_GROUP_ARRAY(state) AS chunk_cells FROM cell WHERE chunk_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)  GROUP BY chunk_id" 1978 3955 5932 1979 3956 5933 1980 3957 5934]))
-
   (d/q reader ["pragma query_only"])
   (d/q writer ["pragma query_only"])
 
   (count (:conn-pool reader))
 
   (d/optimize-db reader)
-  (d/optimize-db writer)
+  (d/optimize-db writer))
 
-  "134"
-
-  (d/q db ["SELECT checks FROM session WHERE id = ?" "134"])
-  (d/q db ["SELECT checks FROM session WHERE id = ?" "134"])
-  (d/q db ["SELECT checks FROM session WHERE id = ?" 34])
-
-  (d/q db ["SELECT checks FROM session WHERE id = ?" "foo"])
-  (d/q db ["SELECT id FROM session"])
-
-  (d/q writer ["SELECT * FROM session WHERE id = ?" "bar"])
-  (+ 3 4)
-  (time
-    (d/q writer
-      ["INSERT INTO session (id, checks) VALUES (?, ?)" "stro" 1]))
-
-  )
-
-(comment
+(comment  
+  (d/q writer
+    ["CREATE TABLE IF NOT EXISTS session(id TEXT PRIMARY KEY, data BLOB) WITHOUT ROWID"])
+  
   (def sid "someid")
 
   (defn test-case [db sid]
-    (let [[checks] (d/q db ["SELECT checks FROM session WHERE id = ?" sid])]
-      (if checks
-        (d/q db ["UPDATE session SET checks = ? WHERE id = ?" checks sid])
-        (d/q db ["INSERT INTO session (id, checks) VALUES (?, ?)" sid 1]))))
+    (let [[data] (d/q db ["SELECT data FROM session WHERE id = ?" sid])]
+      (if data
+        (d/q db ["UPDATE session SET data = ? WHERE id = ?" data sid])
+        (d/q db ["INSERT INTO session (id, data) VALUES (?, ?)" sid {:a 2}]))))
 
   (do
     (test-case writer sid)
     (test-case writer sid)
-    (d/q writer ["SELECT checks FROM session WHERE id = ?" sid]))
+    (d/q writer ["SELECT data FROM session WHERE id = ?" sid]))
 
   (d/with-write-tx [tx writer]
     (test-case tx sid)
     (test-case tx sid)
-    (d/q tx ["SELECT checks FROM session WHERE id = ?" sid])))
+    (d/q tx ["SELECT data FROM session WHERE id = ?" sid]))
+  
+  (d/q writer ["UPDATE session SET data = ? WHERE id = ?" [2] sid])
+
+  (d/with-write-tx [tx writer]
+    (d/q tx ["SAVEPOINT thunk-tx;"])
+    (try
+      (d/q tx ["UPDATE session SET data = ? WHERE id = ?" {:a 6} sid])
+      (d/q tx ["INSERT INTO session (id, data) VALUES (?, ?);" sid 1])
+      (catch Throwable _
+        (d/q tx ["ROLLBACK TO thunk-tx;"])))
+    (d/q tx ["RElEASE thunk-tx;"])
+    ;; (d/q tx ["UPDATE session SET data = ? WHERE id = ?" {:a 4} sid])
+    (d/q tx ["SELECT data FROM session WHERE id = ?" sid])))
 
 (comment
   (d/q writer
@@ -268,5 +207,11 @@
   ;; now change and re-eval double and see magic!
   ;;
   )
+
+
+
+
+
+
 
   
