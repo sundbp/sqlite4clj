@@ -114,7 +114,7 @@
    :journal_mode       "WAL"
    :synchronous        "NORMAL"
    :temp_store         "MEMORY"
-   :foreign_keys       true
+   :foreign_keys       false
    ;; Because of WAL and a single writer at the application level
    ;; SQLITE_BUSY error should almost never happen, see:
    ;; https://sqlite.org/wal.html#sometimes_queries_return_sqlite_busy_in_wal_mode
