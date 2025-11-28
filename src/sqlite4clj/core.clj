@@ -151,7 +151,8 @@
 
 (defn init-pool!
   [db-name & [{:keys [pool-size pragma read-only]
-               :or   {pool-size 4}}]]
+               :or   {pool-size
+                      (Runtime/.availableProcessors (Runtime/getRuntime))}}]]
   (let [conns (repeatedly pool-size
                 (fn [] (new-conn! db-name pragma read-only)))
         pool  (LinkedBlockingQueue/new ^int pool-size)]
@@ -164,7 +165,9 @@
 (defn init-db!
   "A db consists of a read pool of size :pool-size and a write pool of size 1.
   The same pragma are set for both pools."
-  [url & [{:keys [pool-size pragma ] :or {pool-size 4}}]]
+  [url & [{:keys [pool-size pragma]
+           :or {pool-size (Runtime/.availableProcessors
+                            (Runtime/getRuntime))}}]]
   (assert (< 0 pool-size))
   (let [;; Only one write connection
         writer
