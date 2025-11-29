@@ -17,8 +17,7 @@
   a single transaction. Use SQLite's SAVEPOINTS and ROLLBACK for logically
   nested transactions. As well as an entry point for coarse or fine grained
   subscriptions to changes."
-  [db & {:keys [return-promise? batch-fn
-                max-batch-size]
+  [db & {:keys [batch-fn return-promise? max-batch-size]
          :or   {max-batch-size  10000
                 ;; If true tx! returns a promise
                 return-promise? true}}]
@@ -26,6 +25,7 @@
   ;; ConcurrentLinkedQueue. However, it allows for a cleaner batch
   ;; function interface as you can provide more context (like a cache)
   ;; and subsequent iterations (e.g: reduce over changes).
+  (assert (not (nil? batch-fn)))
   (let [batch-max-size max-batch-size
         batch_         (atom [])]
     (Thread/startVirtualThread
@@ -43,7 +43,7 @@
                 ;; The benefit of this being a virtual thread is there's no
                 ;; overhead for idle batchers so you can have multiple
                 ;; sqlite db batcher without incurring overhead.
-                ;; A batch-fn can always execute work on it's own CPU thread 
+                ;; A batch-fn can always execute work on it's own CPU thread
                 ;; if that's desirable.
                 (batch-fn (db :writer)
                   (subvec old-b 0 (- (count old-b) (count new-b))))))))))
