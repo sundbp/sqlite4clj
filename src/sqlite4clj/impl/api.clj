@@ -91,8 +91,9 @@
   (with-open [arena (mem/confined-arena)]
     (let [pdb           (mem/alloc-instance ::mem/pointer arena)
           filename-utf8 (String/new (String/.getBytes filename "UTF-8") "UTF-8")
+          vfs-utf8      (String/new (String/.getBytes vfs "UTF-8") "UTF-8")
           code          (sqlite3-open-native filename-utf8
-                          pdb flags vfs)]
+                          pdb flags vfs-utf8)]
       (if (sqlite-ok? code)
         (mem/deserialize-from pdb ::mem/pointer)
         (throw (sqlite-ex-info pdb code {:filename filename}))))))
