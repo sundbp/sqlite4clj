@@ -138,10 +138,10 @@
     ;; as optimise require connection not to be read only
     [(str "pragma query_only=" (boolean read-only))]))
 
-(defn new-conn! [db-name pragma read-only]
+(defn new-conn! [db-name pragma read-only vfs]
   (let [;; SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
         flags           (bit-or 0x00000002 0x00000004)
-        *pdb            (api/open-v2 db-name flags)
+        *pdb            (api/open-v2 db-name flags vfs)
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
         conn            {:pdb        *pdb
                          :stmt-cache statement-cache}]
@@ -150,11 +150,11 @@
     conn))
 
 (defn init-pool!
-  [db-name & [{:keys [pool-size pragma read-only]
+  [db-name & [{:keys [pool-size pragma read-only vfs]
                :or   {pool-size
                       (Runtime/.availableProcessors (Runtime/getRuntime))}}]]
   (let [conns (repeatedly pool-size
-                (fn [] (new-conn! db-name pragma read-only)))
+                (fn [] (new-conn! db-name pragma read-only vfs)))
         pool  (LinkedBlockingQueue/new ^int pool-size)]
     (run! #(BlockingQueue/.add pool %) conns)
     {:conn-pool   pool
@@ -165,21 +165,23 @@
 (defn init-db!
   "A db consists of a read pool of size :pool-size and a write pool of size 1.
   The same pragma are set for both pools."
-  [url & [{:keys [pool-size pragma writer-pragma]
-           :or {pool-size (Runtime/.availableProcessors
-                            (Runtime/getRuntime))}}]]
+  [url & [{:keys [pool-size pragma writer-pragma vfs]
+           :or   {pool-size (Runtime/.availableProcessors
+                              (Runtime/getRuntime))}}]]
   (assert (< 0 pool-size))
   (let [;; Only one write connection
         writer
         (init-pool! url
-          {:pool-size  1
-           :pragma     (merge pragma writer-pragma)})
+          {:pool-size 1
+           :pragma    (merge pragma writer-pragma)
+           :vfs       vfs})
         ;; Pool of read connections
         reader
         (init-pool! url
           {:read-only true
            :pool-size pool-size
-           :pragma    pragma})]
+           :pragma    pragma
+           :vfs       vfs})]
     {:writer   writer
      :reader   reader
      ;; Prevents application function callback pointers from getting
