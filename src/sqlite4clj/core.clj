@@ -165,7 +165,7 @@
 (defn init-db!
   "A db consists of a read pool of size :pool-size and a write pool of size 1.
   The same pragma are set for both pools."
-  [url & [{:keys [pool-size pragma]
+  [url & [{:keys [pool-size pragma writer-pragma]
            :or {pool-size (Runtime/.availableProcessors
                             (Runtime/getRuntime))}}]]
   (assert (< 0 pool-size))
@@ -173,7 +173,7 @@
         writer
         (init-pool! url
           {:pool-size  1
-           :pragma     pragma})
+           :pragma     (merge pragma writer-pragma)})
         ;; Pool of read connections
         reader
         (init-pool! url
