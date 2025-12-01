@@ -318,7 +318,6 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
    -DSQLITE_ENABLE_STAT4 \
    -DSQLITE_ENABLE_RTREE \
    -DSQLITE_ENABLE_FTS5 \
-   -DSQLITE_ENABLE_LOCKING_STYLE \
    -DSQLITE_MAX_MMAP_SIZE=1099511627776 \
    sqlite3.c -lpthread -ldl -lm -o sqlite3.so
 ```

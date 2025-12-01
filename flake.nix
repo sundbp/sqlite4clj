@@ -38,7 +38,6 @@
                   "-DSQLITE_ENABLE_STAT4"
                   "-DSQLITE_ENABLE_RTREE"
                   "-DSQLITE_ENABLE_FTS5"
-                  "-DSQLITE_ENABLE_LOCKING_STYLE"
                   "-DSQLITE_MAX_MMAP_SIZE=1099511627776"
                 ]
               );
