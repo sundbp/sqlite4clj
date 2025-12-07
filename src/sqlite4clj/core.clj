@@ -8,22 +8,17 @@
   (:import
    (java.util.concurrent BlockingQueue LinkedBlockingQueue)))
 
-(defn type->sqlite3-bind [param]
-  (cond
-    (integer? param) `api/bind-int
-    (double? param)  `api/bind-double
-    (string? param)  `api/bind-text
-    :else            `api/bind-blob))
-
-(defmacro build-bind-fn [first-run-params]
-  (let [stmt   (gensym)
-        params (gensym)]
-    `(fn [~stmt ~params]
-       ~@(map-indexed
-           (fn [i param]
-             ;; starts at 1
-             `(~(type->sqlite3-bind param) ~stmt ~(inc i)
-               (~params ~i))) first-run-params))))
+(defn bind [stmt params]
+  (reduce
+    (fn [i param]
+      (cond
+        (integer? param) (api/bind-int    stmt i param)
+        (double? param)  (api/bind-double stmt i param)
+        (string? param)  (api/bind-text   stmt i param)
+        :else            (api/bind-blob   stmt i param))
+      (inc i))
+    1 ;; starts at 1
+    params))
 
 (defn col-type->col-fn [sqlite-type]
   ;; See type codes here: https://sqlite.org/c3ref/c_blob.html
@@ -42,7 +37,7 @@
 
 (defmacro build-column-fn [column-types]
   (let [stmt (gensym)]
-    `(fn [~stmt]
+    `(fn ~'col-fn [~stmt]
        ~(if (= (count column-types) 1)
           ;; Unwrap when returning single column
           `(~(col-type->col-fn (first column-types)) ~stmt 0)
@@ -51,18 +46,17 @@
                  column-types))))))
 
 (defn prepare
-  ([pdb sql params]
+  ([pdb sql]
    (let [stmt (api/prepare-v3 pdb sql)]
-     (cond-> {:stmt stmt}
-       (seq params) (assoc :bind-fn (eval `(build-bind-fn ~params)))))))
+     {:stmt stmt})))
 
 (defn prepare-cached [{:keys [pdb stmt-cache]} query]
   (let [sql    (first query)
         params (subvec query 1)
-        {:keys [stmt bind-fn] :as m}
+        {:keys [stmt] :as m}
         (cache/lookup-or-miss stmt-cache sql
-          (fn [_] (prepare pdb sql params)))]
-    (when bind-fn (bind-fn stmt params))
+          (fn [_] (prepare pdb sql)))]
+    (bind stmt params)
     m))
 
 (defmacro with-stmt-reset
