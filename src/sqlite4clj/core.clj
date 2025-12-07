@@ -20,31 +20,6 @@
     1 ;; starts at 1
     params))
 
-(defn col-type->col-fn [sqlite-type]
-  ;; See type codes here: https://sqlite.org/c3ref/c_blob.html
-  (case (int sqlite-type)
-    1 `api/column-int
-    2 `api/column-double
-    3 `api/column-text
-    4 `api/column-blob
-    5 `(fn [_# _#] nil)))
-
-(defn get-column-types [stmt]
-  (let [n-cols (int
-                 #_{:clj-kondo/ignore [:type-mismatch]}
-                 (api/column-count stmt))]
-    (mapv (fn [n] (api/column-type stmt n)) (range 0 n-cols))))
-
-(defmacro build-column-fn [column-types]
-  (let [stmt (gensym)]
-    `(fn ~'col-fn [~stmt]
-       ~(if (= (count column-types) 1)
-          ;; Unwrap when returning single column
-          `(~(col-type->col-fn (first column-types)) ~stmt 0)
-          (vec (map-indexed
-                 (fn [i n] `(~(col-type->col-fn n) ~stmt ~i))
-                 column-types))))))
-
 (defn prepare
   ([pdb sql]
    (let [stmt (api/prepare-v3 pdb sql)]
@@ -69,32 +44,56 @@
          (api/reset ~stmt-binding)
          (api/clear-bindings ~stmt-binding)))))
 
-(defn step-rows [stmt col-fn rows]
-  (loop [rows (transient rows)]
-    (let [code (int
-                 #_{:clj-kondo/ignore [:type-mismatch]}
-                 (api/step stmt))]
-      (case code
-        100 (recur (conj! rows (col-fn stmt)))
-        101 (persistent! rows)
-        code))))
+(defn get-column-val [stmt n]
+  (case (int #_{:clj-kondo/ignore [:type-mismatch]}
+          (api/column-type stmt n))
+    ;; See type codes here: https://sqlite.org/c3ref/c_blob.html
+    1 (api/column-int    stmt n)
+    2 (api/column-double stmt n)
+    3 (api/column-text   stmt n)
+    4 (api/column-blob   stmt n)
+    5 nil))
 
-(defn- q* [conn [sql :as query]]
+(defn column [stmt n-cols]
+  (case n-cols
+    0 nil
+    1 (get-column-val stmt 0)
+    2 [(get-column-val stmt 0) (get-column-val stmt 1)]
+    3 [(get-column-val stmt 0)
+       (get-column-val stmt 1)
+       (get-column-val stmt 2)]
+    4 [(get-column-val stmt 0)
+       (get-column-val stmt 1)
+       (get-column-val stmt 2)
+       (get-column-val stmt 3)]
+    5 [(get-column-val stmt 0)
+       (get-column-val stmt 1)
+       (get-column-val stmt 2)
+       (get-column-val stmt 3)
+       (get-column-val stmt 4)]
+    ;; After 5 params it's worth iterating
+    (loop [n    0
+           cols (transient [])]
+      (if (>= n n-cols)
+        (persistent! cols)
+        (recur (inc n)
+          (conj! cols (get-column-val stmt n)))))))
+
+(defn- q* [conn query]
   (let [result
-        (let [{:keys [stmt col-fn]} (prepare-cached conn query)]
+        (let [{:keys [stmt]} (prepare-cached conn query)]
           (with-stmt-reset [stmt stmt]
-            (if col-fn
-              (step-rows stmt col-fn [])
-              (let [stmt-cache (:stmt-cache conn)
-                    code       (int
-                                 #_{:clj-kondo/ignore [:type-mismatch]}
-                                 (api/step stmt))]
-                (if (= 100 code)
-                  (let [col-types (get-column-types stmt)
-                        col-fn    (eval `(build-column-fn ~col-types))]
-                    (swap! stmt-cache assoc-in [sql :col-fn] col-fn)
-                    (step-rows stmt col-fn [(col-fn stmt)]))
-                  code)))))]
+            (let [n-cols (int
+                           #_{:clj-kondo/ignore [:type-mismatch]}
+                           (api/column-count stmt))]
+              (loop [rows (transient [])]
+                (let [code (int
+                             #_{:clj-kondo/ignore [:type-mismatch]}
+                             (api/step stmt))]
+                  (case code
+                    100 (recur (conj! rows (column stmt n-cols)))
+                    101 (persistent! rows)
+                    code))))))]
     (cond
       (vector? result) (when (seq result) result)
       (= result 101)   nil
