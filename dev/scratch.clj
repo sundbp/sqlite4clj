@@ -1,5 +1,6 @@
 (ns scratch
   (:require [sqlite4clj.core :as d]
+            [sqlite4clj.batch :as b]
             [clj-async-profiler.core :as prof]
             [fast-edn.core :as edn])
   (:import (java.util.concurrent Executors)))
@@ -256,4 +257,22 @@
     )
   
 
+  )
+
+(comment ;; batch
+  (defonce tx!
+    (b/async-batcher-init! db
+      {:max-batch-size 10000
+       :batch-fn
+       (fn batch-fn [writer batch]
+         (d/with-write-tx [db writer]
+           (run! (fn [thunk] (thunk db)) batch)))}))
+
+  (->>
+    (mapv (fn [n]
+            (tx! (fn [tx] (d/q tx ["select * from bar limit ?" n]))))
+      [1 2 3 4])
+    (mapv deref))
+
+  
   )

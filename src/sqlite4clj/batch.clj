@@ -1,5 +1,8 @@
 (ns sqlite4clj.batch)
 
+(defn post-transaction-deliver [results_ p thunk-result]
+  (swap! results_ conj [p thunk-result]))
+
 (defn async-batcher-init!
   "Creates an async batching process that dynamically batches writes.
 
@@ -16,7 +19,11 @@
   This can be used to increase write throughput by batching writes in
   a single transaction. Use SQLite's SAVEPOINTS and ROLLBACK for logically
   nested transactions. As well as an entry point for coarse or fine grained
-  subscriptions to changes."
+  subscriptions to changes.
+
+  Returns a function tx! that lets you dispatch async batch writes. By default
+  tx! returns a promise that will deliver the result after the whole batch
+  has run."
   [db & {:keys [batch-fn return-promise? max-batch-size]
          :or   {max-batch-size  10000
                 ;; If true tx! returns a promise
@@ -27,7 +34,8 @@
   ;; and subsequent iterations (e.g: reduce over changes).
   (assert (not (nil? batch-fn)))
   (let [batch-max-size max-batch-size
-        batch_         (atom [])]
+        batch_         (atom [])
+        batch-results_ (atom [])]
     (Thread/startVirtualThread
       (bound-fn* ;; binding conveyance
         (fn batch-thread []
@@ -46,12 +54,18 @@
                 ;; A batch-fn can always execute work on it's own CPU thread
                 ;; if that's desirable.
                 (batch-fn (db :writer)
-                  (subvec old-b 0 (- (count old-b) (count new-b))))))))))
+                  (subvec old-b 0 (- (count old-b) (count new-b))))
+                ;; TODO: how to signal batch-fn has failed? Or rolled back?
+                (when-not (= (count @batch-results_) 0)
+                  (let [[results _] (reset-vals! batch-results_ [])]
+                    (run! (fn [[p result]] (deliver p result)) results)))))))))
     (if return-promise?
-      ;; Note: returns promise after the thunk is run. Not after the batch has
-      ;; been committed.
+      ;; Returns promise after the whole batch has completed.
       (fn tx! [thunk]
         (let [p (promise)]
-          (swap! batch_ conj (comp (partial deliver p) thunk))
+          (swap! batch_ conj
+            (comp
+              (partial post-transaction-deliver batch-results_ p)
+              thunk))
           p))
-      (fn tx! [thunk] (swap! batch_ conj thunk)))))
+      (fn tx! [thunk] (swap! batch_ conj thunk) nil))))
