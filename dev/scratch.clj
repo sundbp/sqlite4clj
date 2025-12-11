@@ -229,17 +229,31 @@
                  (rand-int 10000000)]))
 
   (user/bench
-    ;; 155.619939 µs - inline cache
-    ;; 280.898845 µs - no inline cache
+    ;; Execution time mean : 199.489465 µs
     (d/q writer ["select * from bar limit 1000"]))
 
   (user/bench
-    ;; 155.619939 µs - inline cache
-    ;; 280.898845 µs - no inline cache
+    ;; Execution time mean : 154.116798 µs
     (d/q writer ["select id from bar limit 1000"]))
 
   
   (d/q writer ["select count(*) from bar"])
+
+  (d/q writer ["select count(*) from bar"])
+
+  ;; q* lock test
+  (d/with-write-tx [tx writer]
+    (future (d/q tx ["select count(*) from bar"])
+            (d/q tx ["select count(*) from bar"])
+            (d/q tx ["select count(*) from bar"])
+            (d/q tx ["select count(*) from bar"]))
+    (d/q tx ["select count(*) from bar"])
+    (d/q tx ["select count(*) from bar"])
+    (d/q tx ["select count(*) from bar"])
+    (d/q tx ["select count(*) from bar"])
+    (d/q tx ["select count(*) from bar"])
+    (d/q tx ["select count(*) from bar"])
+    )
   
 
   )

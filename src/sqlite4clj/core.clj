@@ -80,26 +80,43 @@
           (conj! cols (get-column-val stmt n)))))))
 
 (defn- q* [conn query]
-  (let [result
-        (let [{:keys [stmt]} (prepare-cached conn query)]
-          (with-stmt-reset [stmt stmt]
-            (let [n-cols (int
-                           #_{:clj-kondo/ignore [:type-mismatch]}
-                           (api/column-count stmt))]
-              (loop [rows (transient [])]
-                (let [code (int
+  ;; sqlite4clj uses -DSQLITE_THREADSAFE=2 which means sqlite4clj is
+  ;; responsible for serializing access to database connections and prepared
+  ;; prepared statements. SQLite will be safe to use in a multi-threaded
+  ;; environment as long as no two threads attempt to use the same database
+  ;; connection at the same time.
+
+  ;; The reason for this is letting SQLite manage these locks is messy and
+  ;; can lead to high tail latency (SQLITE_BUSY). So it's better for the
+  ;; driver/application layer to handle it.
+
+  ;; sqlite4clj manages connections through the pool. So most of the time
+  ;; connections will only be handled by a single thread at a time.
+  ;; The exception is when write/read transactions are being used in
+  ;; creative async contexts. So this lock is here to prevent problems when
+  ;; that happens. Outside of this usage it will not come into play/cause
+  ;; contention.
+  (locking conn
+    (let [result
+          (let [{:keys [stmt]} (prepare-cached conn query)]
+            (with-stmt-reset [stmt stmt]
+              (let [n-cols (int
                              #_{:clj-kondo/ignore [:type-mismatch]}
-                             (api/step stmt))]
-                  (case code
-                    100 (recur (conj! rows (column stmt n-cols)))
-                    101 (persistent! rows)
-                    code))))))]
-    (cond
-      (vector? result) (when (seq result) result)
-      (= result 101)   nil
-      :else            (throw (api/sqlite-ex-info (:pdb conn) result
-                                {:sql    (first query)
-                                 :params (subvec query 1)})))))
+                             (api/column-count stmt))]
+                (loop [rows (transient [])]
+                  (let [code (int
+                               #_{:clj-kondo/ignore [:type-mismatch]}
+                               (api/step stmt))]
+                    (case code
+                      100 (recur (conj! rows (column stmt n-cols)))
+                      101 (persistent! rows)
+                      code))))))]
+      (cond
+        (vector? result) (when (seq result) result)
+        (= result 101)   nil
+        :else            (throw (api/sqlite-ex-info (:pdb conn) result
+                                  {:sql    (first query)
+                                   :params (subvec query 1)}))))))
 
 (def default-pragma
   {:cache_size         15625
