@@ -234,8 +234,12 @@
        (try
          (q ~tx ["BEGIN DEFERRED"])
          ~@body
+         (q ~tx ["COMMIT"])
+         (catch Throwable t#
+           ;; Handles non SQLITE errors crashing a transaction
+           (q ~tx ["ROLLBACK"])
+           (throw t#))
          (finally
-           (q ~tx ["COMMIT"])
            (BlockingQueue/.offer conn-pool# ~tx))))))
 
 (defmacro with-write-tx
@@ -248,8 +252,12 @@
        (try
          (q ~tx ["BEGIN IMMEDIATE"])
          ~@body
+         (q ~tx ["COMMIT"])
+         (catch Throwable t#
+           ;; Handles non SQLITE errors crashing a transaction
+           (q ~tx ["ROLLBACK"])
+           (throw t#))
          (finally
-           (q ~tx ["COMMIT"])
            (BlockingQueue/.offer conn-pool# ~tx))))))
 
 (defmacro with-conn

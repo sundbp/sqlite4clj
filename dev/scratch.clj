@@ -209,56 +209,6 @@
   ;;
   )
 
-(comment
-  (d/q writer
-    ["CREATE TABLE IF NOT EXISTS foo(id  PRIMARY KEY, data)"])
-  
-  (d/q writer ["INSERT INTO test (id, data) VALUES (?, ?)" 1 34])
-  (d/q writer ["INSERT INTO test (id, data) VALUES (?, ?)" 2 "foo"])
-  (d/q writer ["INSERT INTO test (id, data) VALUES (?, ?)" 3 {:a 2}])
-  (d/q writer ["INSERT INTO test (id, data) VALUES (?, ?)" 6 34])
-  (d/q writer ["INSERT INTO test (id, data) VALUES (?, ?)" 7 "foo"])
-  (d/q writer ["INSERT INTO test (id, data) VALUES (?, ?)" 8 34])
-  (d/q writer ["INSERT INTO test (id, data) VALUES (?, ?)" 9 "foo"])
-
-  (d/q writer
-    ["CREATE TABLE IF NOT EXISTS bar(id TEXT PRIMARY KEY, data) WITHOUT ROWID"])
-
-  (user/bench
-    (d/q writer ["INSERT INTO bar (id, data) VALUES (?, ?)"
-                 (str (random-uuid))
-                 (rand-int 10000000)]))
-
-  (user/bench
-    ;; Execution time mean : 199.489465 µs
-    (d/q writer ["select * from bar limit 1000"]))
-
-  (user/bench
-    ;; Execution time mean : 154.116798 µs
-    (d/q writer ["select id from bar limit 1000"]))
-
-  
-  (d/q writer ["select count(*) from bar"])
-
-  (d/q writer ["select count(*) from bar"])
-
-  ;; q* lock test
-  (d/with-write-tx [tx writer]
-    (future (d/q tx ["select count(*) from bar"])
-            (d/q tx ["select count(*) from bar"])
-            (d/q tx ["select count(*) from bar"])
-            (d/q tx ["select count(*) from bar"]))
-    (d/q tx ["select count(*) from bar"])
-    (d/q tx ["select count(*) from bar"])
-    (d/q tx ["select count(*) from bar"])
-    (d/q tx ["select count(*) from bar"])
-    (d/q tx ["select count(*) from bar"])
-    (d/q tx ["select count(*) from bar"])
-    )
-  
-
-  )
-
 (comment ;; batch
   (defonce tx!
     (b/async-batcher-init! db
