@@ -6,6 +6,12 @@
 
 (use-fixtures :once test-fixture)
 
+(deftest pool-objects-are-references
+  (testing "Ensure pool objects are references to connections."
+    (with-db [db (test-db)]
+      (d/with-conn [conn (:writer db)]
+        (is (identical? conn (first (:connections (db :writer)))))))))
+
 (deftest improper-access-of-connections-or-prepared-statements
   (testing "Does not cause segfault when connections are accessed from
             separate threads."

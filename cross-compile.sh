@@ -22,7 +22,6 @@ do
         -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
         -DSQLITE_LIKE_DOESNT_MATCH_BLOBS \
         -DSQLITE_MAX_EXPR_DEPTH=0 \
-        -DSQLITE_OMIT_DECLTYPE \
         -DSQLITE_OMIT_DEPRECATED \
         -DSQLITE_OMIT_PROGRESS_CALLBACK \
         -DSQLITE_OMIT_SHARED_CACHE \
@@ -34,6 +33,7 @@ do
         -DSQLITE_ENABLE_RTREE \
         -DSQLITE_ENABLE_FTS5 \
         -DSQLITE_MAX_MMAP_SIZE=1099511627776 \
+        -DSQLITE_ENABLE_COLUMN_METADATA \
         sqlite3.c -lpthread $dl -lm -o sqlite3.so -target $target
     cp -v sqlite3.so ../resources/sqlite3_$target.$extension
 done

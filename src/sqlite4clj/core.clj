@@ -22,8 +22,18 @@
 
 (defn prepare
   ([pdb sql]
-   (let [stmt (api/prepare-v3 pdb sql)]
-     {:stmt stmt})))
+   (let [stmt      (api/prepare-v3 pdb sql)
+         col-count (int #_{:clj-kondo/ignore [:type-mismatch]}
+                     (api/column-count stmt))]
+     (cond-> {:stmt stmt}
+       (> col-count 0)
+       (assoc :col-metadata
+         (mapv (fn [c]
+                 {:database (api/column-database-name stmt c)
+                  :table    (api/column-table-name stmt c)
+                  :origin   (api/column-origin-name stmt c)
+                  :alias    (api/column-name stmt c)})
+           (range 0 col-count)))))))
 
 (defn prepare-cached [{:keys [pdb stmt-cache]} query]
   (let [sql    (first query)
@@ -57,8 +67,9 @@
 (defn column [stmt n-cols]
   (case n-cols
     0 nil
-    1 (get-column-val stmt 0)
-    2 [(get-column-val stmt 0) (get-column-val stmt 1)]
+    1 [(get-column-val stmt 0)]
+    2 [(get-column-val stmt 0)
+       (get-column-val stmt 1)]
     3 [(get-column-val stmt 0)
        (get-column-val stmt 1)
        (get-column-val stmt 2)]
@@ -79,7 +90,7 @@
         (recur (inc n)
           (conj! cols (get-column-val stmt n)))))))
 
-(defn- q* [conn query]
+(defn- q* [conn query result-set-fn]
   ;; sqlite4clj uses -DSQLITE_THREADSAFE=2 which means sqlite4clj is
   ;; responsible for serializing access to database connections and prepared
   ;; prepared statements. SQLite will be safe to use in a multi-threaded
@@ -97,26 +108,28 @@
   ;; that happens. Outside of this usage it will not come into play/cause
   ;; contention.
   (locking conn
-    (let [result
-          (let [{:keys [stmt]} (prepare-cached conn query)]
-            (with-stmt-reset [stmt stmt]
-              (let [n-cols (int
-                             #_{:clj-kondo/ignore [:type-mismatch]}
-                             (api/column-count stmt))]
-                (loop [rows (transient [])]
+    (let [{:keys [stmt col-metadata]} (prepare-cached conn query)]
+      (with-stmt-reset [stmt stmt]
+        (let [n-cols (int
+                       #_{:clj-kondo/ignore [:type-mismatch]}
+                       (api/column-count stmt))]
+          (result-set-fn col-metadata
+            (reify
+              clojure.lang.IReduceInit
+              (reduce [_ f init]
+                (loop [ret init]
                   (let [code (int
                                #_{:clj-kondo/ignore [:type-mismatch]}
                                (api/step stmt))]
                     (case code
-                      100 (recur (conj! rows (column stmt n-cols)))
-                      101 (persistent! rows)
-                      code))))))]
-      (cond
-        (vector? result) (when (seq result) result)
-        (= result 101)   nil
-        :else            (throw (api/sqlite-ex-info (:pdb conn) result
-                                  {:sql    (first query)
-                                   :params (subvec query 1)}))))))
+                      100 (let [result (f ret (column stmt n-cols))]
+                            (if (reduced? result)
+                              @result
+                              (recur result)))
+                      101 ret
+                      (throw (api/sqlite-ex-info (:pdb conn) ret
+                               {:sql    (first query)
+                                :params (subvec query 1)})))))))))))))
 
 (def default-pragma
   {:cache_size         15625
@@ -148,35 +161,64 @@
     ;; as optimise require connection not to be read only
     [(str "pragma query_only=" (boolean read-only))]))
 
-(defn new-conn! [db-name pragma read-only vfs]
+(defn no-unwrap-result-set-fn
+  [_col-metadata result-set]
+  (let [result (into [] result-set)]
+    (when (seq result) result)))
+
+(defn qualified-keyword-result-set-fn [col-metadata result-set]
+  (let [col-keys
+        (mapv (fn [{:keys [table alias]}]
+                (keyword table alias)) col-metadata)
+        result (into []
+                 (map (fn [col-vals]
+                        (zipmap col-keys col-vals)))
+                 result-set)]
+    (when (seq result) result)))
+
+(defn new-conn! [db-name pragma read-only vfs default-result-set-fn]
   (let [;; SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
         flags           (bit-or 0x00000002 0x00000004)
         *pdb            (api/open-v2 db-name flags vfs)
+        pragma-cache    (cache/fifo-cache-factory {} :threshold 512)
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
         conn            {:pdb        *pdb
-                         :stmt-cache statement-cache}]
+                         :stmt-cache pragma-cache}]
     (->> (pragma->set-pragma-query pragma read-only)
-      (run! #(q* conn %)))
-    conn))
+      (run! #(q* conn % default-result-set-fn)))
+    ;; Stops pragma statements polluting the cache
+    {:pdb        *pdb
+     :stmt-cache statement-cache}))
 
 (defn init-pool!
-  [db-name & [{:keys [pool-size pragma read-only vfs]
+  [db-name & [{:keys [pool-size pragma read-only vfs default-result-set-fn]
                :or   {pool-size
                       (Runtime/.availableProcessors (Runtime/getRuntime))}}]]
   (let [conns (repeatedly pool-size
-                (fn [] (new-conn! db-name pragma read-only vfs)))
+                (fn [] (new-conn! db-name pragma read-only vfs
+                         default-result-set-fn)))
         pool  (LinkedBlockingQueue/new ^int pool-size)]
     (run! #(BlockingQueue/.add pool %) conns)
     {:conn-pool   pool
+     :default-result-set-fn default-result-set-fn
      :connections conns
      :close
      (fn [] (run! (fn [conn] (api/close (:pdb conn))) conns))}))
 
+(defn default-result-set-fn
+  [col-metadata result-set]
+  (let [result (if (= (count col-metadata) 1)
+                 (into [] cat result-set)
+                 (into [] result-set))]
+    (when (seq result) result)))
+
 (defn init-db!
   "A db consists of a read pool of size :pool-size and a write pool of size 1.
   The same pragma are set for both pools."
-  [url & [{:keys [pool-size pragma writer-pragma vfs]
-           :or   {pool-size (Runtime/.availableProcessors
+  [url & [{:keys [pool-size pragma writer-pragma vfs
+                  default-result-set-fn]
+           :or   {default-result-set-fn default-result-set-fn
+                  pool-size (Runtime/.availableProcessors
                               (Runtime/getRuntime))}}]]
   (assert (< 0 pool-size))
   (let [;; Only one write connection
@@ -184,14 +226,16 @@
         (init-pool! url
           {:pool-size 1
            :pragma    (merge pragma writer-pragma)
-           :vfs       vfs})
+           :vfs       vfs
+           :default-result-set-fn default-result-set-fn})
         ;; Pool of read connections
         reader
         (init-pool! url
           {:read-only true
            :pool-size pool-size
            :pragma    pragma
-           :vfs       vfs})]
+           :vfs       vfs
+           :default-result-set-fn default-result-set-fn})]
     {:writer   writer
      :reader   reader
      ;; Prevents application function callback pointers from getting
@@ -200,16 +244,18 @@
 
 (defn q
   "Run a query against a db. Return nil when no results."
-  [{:keys [conn-pool] :as tx} query]
+  [{:keys [conn-pool default-result-set-fn] :as tx} query &
+   [{:keys [result-set-fn]
+     :or   {result-set-fn default-result-set-fn}}] ]
   (if conn-pool
-    (binding [*print-length*    nil]
+    (binding [*print-length* nil]
       (let [conn (BlockingQueue/.take conn-pool)]
         (try
-          (q* conn query)
+          (q* conn query result-set-fn)
           ;; Always return the conn even on error
           (finally (BlockingQueue/.offer conn-pool conn)))))
     ;; If we don't have a connection pool then we have a tx.
-    (q* tx query)))
+    (result-set-fn (q* tx query result-set-fn))))
 
 (defn optimize-db
   "Use for running optimise on long lived connections. For query_only

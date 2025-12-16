@@ -50,7 +50,7 @@ Running a read query:
  ...]
 ```
 
-Unwrapped results when querying a single column:
+Unwrapped results when querying a single column (this behaviour can be changed with `d/no-unwrap-result-set-fn`):
 
 ```clojure
 (d/q (:reader db)
@@ -98,6 +98,73 @@ Read transactions:
 (d/with-read-tx [tx writer]
   (= (d/q tx ["SELECT checks FROM session WHERE id = ?" "user1"])
      (d/q tx ["SELECT checks FROM session WHERE id = ?" "user2"])))
+```
+
+## Result set functions
+
+By default sqlite4clj returns vectors. However, you can pass in a `result-set-fn` to change this behaviour.
+
+sqlite4clj provides a `d/qualified-keyword-result-set-fn`:
+
+```clojure
+(d/q (:reader db)
+  ["SELECT chunk_id, state FROM cell WHERE chunk_id = ?" 1978]
+  {:result-set-fn d/qualified-keyword-result-set-fn})
+
+=>
+[{:cell/chunk_id 1978 :cell/state 0}
+ {:cell/chunk_id 1978 :cell/state 0}
+ {:cell/chunk_id 1978 :cell/state 0}
+ {:cell/chunk_id 1978 :cell/state 0}
+ {:cell/chunk_id 1978 :cell/state 0}
+ ...]
+```
+
+Both `d/default-result-set-fn` and `d/qualified-keyword-result-set-fn` return `nil` if the query results in no results.
+
+If you want to make your own result set function:
+
+```clojure
+(defn my-qualified-keyword-result-set-fn [col-metadata result-set]
+  (let [col-keys
+        (mapv (fn [{:keys [table alias]}]
+                (keyword table alias)) col-metadata)]
+    (into []
+      (map (fn [col-vals]
+             (zipmap col-keys col-vals)))
+      result-set)))
+```
+
+ This result set function returns `[]` instead of `nil`:
+
+```clojure
+(d/q (:reader db)
+  ["SELECT chunk_id, state FROM cell WHERE chunk_id = ?" 0]
+  {:result-set-fn d/qualified-keyword-result-set-fn})
+  
+=>
+[]
+```
+
+`col-metadata` is a vector of maps (one for each column) of the form:
+
+```clojure
+[{:database (api/column-database-name stmt c)
+  :table    (api/column-table-name stmt c)
+  :origin   (api/column-origin-name stmt c)
+  :alias    (api/column-name stmt c)}
+  ...]
+```
+
+You can also set the `result-set-fn` for all connections on a database with `default-result-set-fn`:
+
+```clojure
+(defonce db
+  (d/init-db! "database.db"
+    {:read-only true
+     :pool-size 4
+     :pragma    {:foreign_keys false}
+     :default-result-set-fn d/qualified-keyword-result-set-fn}))
 ```
 
 ## Connection pools not thread pools
@@ -306,7 +373,6 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
    -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
    -DSQLITE_LIKE_DOESNT_MATCH_BLOBS \
    -DSQLITE_MAX_EXPR_DEPTH=0 \
-   -DSQLITE_OMIT_DECLTYPE \
    -DSQLITE_OMIT_DEPRECATED \
    -DSQLITE_OMIT_PROGRESS_CALLBACK \
    -DSQLITE_OMIT_SHARED_CACHE \
@@ -318,6 +384,7 @@ gcc -shared -Os -I. -fPIC -DSQLITE_DQS=0 \
    -DSQLITE_ENABLE_RTREE \
    -DSQLITE_ENABLE_FTS5 \
    -DSQLITE_MAX_MMAP_SIZE=1099511627776 \
+   -DSQLITE_ENABLE_COLUMN_METADATA \
    sqlite3.c -lpthread -ldl -lm -o sqlite3.so
 ```
 

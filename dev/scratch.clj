@@ -14,9 +14,9 @@
 
 (defonce db
   (d/init-db! "database.db"
-    {:read-only  true
-     :pool-size  4
-     :pragma     {:foreign_keys false}}))
+    {:read-only true
+     :pool-size 4
+     :pragma    {:foreign_keys false}}))
 
 (def reader  (db :reader))
 (def writer (db :writer))
@@ -104,6 +104,15 @@
      ["some encoded blob"]])
 
   (d/q reader ["SELECT id, data FROM blobby"])
+  (d/q reader ["SELECT id FROM blobby"])
+
+  (d/q reader ["SELECT id, data FROM blobby where id = 3"])
+
+  (d/q reader ["SELECT id, data FROM blobby"]
+    {:result-set-fn d/qualified-keyword-result-set-fn})
+
+  (d/q reader ["SELECT id FROM blobby"]
+    {:result-set-fn d/qualified-keyword-result-set-fn})
 
   (d/q reader ["SELECT id, data FROM blobby WHERE id = ?" "blob-test5"])
   )
@@ -160,6 +169,16 @@
     ;; 52.006687 µs
     ;; 51.460267 µs
     (d/q reader ["select data from test_1"]))
+
+  (user/bench
+    (d/q reader ["select id, data from test_1"]))
+
+  (user/bench
+    (d/q reader ["select id, data from test_1"]
+      {:result-set-fn d/qualified-keyword-result-set-fn}))
+
+  (d/q reader ["select id as foo from test_1"]
+    {:result-set-fn d/qualified-keyword-result-set-fn})
 
   (user/bench ;; 20.496617 µs
     (->> (d/q reader ["select * from test_2"])

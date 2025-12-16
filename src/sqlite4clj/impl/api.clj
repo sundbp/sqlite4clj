@@ -305,3 +305,23 @@
     (sqlite3-result-error-native context
       (String/new msg-bytes "UTF-8")
       (count msg-bytes))))
+
+(defcfn column-database-name
+  sqlite3_column_database_name
+  [::mem/pointer ::mem/int] ::mem/c-string)
+
+(defcfn column-table-name
+  sqlite3_column_table_name
+  [::mem/pointer ::mem/int] ::mem/c-string)
+
+(defcfn column-origin-name
+  sqlite3_column_origin_name
+  [::mem/pointer ::mem/int] ::mem/c-string)
+
+(defcfn column-name
+  ;; The name of a result column is the value of the "AS" clause for that
+  ;; column, if there is an AS clause. If there is no AS clause then the
+  ;; name of the column is unspecified and may change from one release of
+  ;; SQLite to the next.
+  sqlite3_column_name
+  [::mem/pointer ::mem/int] ::mem/c-string)
