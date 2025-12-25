@@ -110,9 +110,10 @@
   (locking conn
     (let [{:keys [stmt col-metadata]} (prepare-cached conn query)]
       (with-stmt-reset [stmt stmt]
-        (let [n-cols (int
-                       #_{:clj-kondo/ignore [:type-mismatch]}
-                       (api/column-count stmt))]
+        (let [n-cols        (int
+                              #_{:clj-kondo/ignore [:type-mismatch]}
+                       (api/column-count stmt))
+              result-set-fn (or result-set-fn (:default-result-set-fn conn))]
           (result-set-fn col-metadata
             (reify
               clojure.lang.IReduceInit
@@ -127,7 +128,7 @@
                               @result
                               (recur result)))
                       101 ret
-                      (throw (api/sqlite-ex-info (:pdb conn) ret
+                      (throw (api/sqlite-ex-info (:pdb conn) code
                                {:sql    (first query)
                                 :params (subvec query 1)})))))))))))))
 
@@ -180,15 +181,13 @@
   (let [;; SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
         flags           (bit-or 0x00000002 0x00000004)
         *pdb            (api/open-v2 db-name flags vfs)
-        pragma-cache    (cache/fifo-cache-factory {} :threshold 512)
         statement-cache (cache/fifo-cache-factory {} :threshold 512)
-        conn            {:pdb        *pdb
-                         :stmt-cache pragma-cache}]
+        conn            {:pdb                   *pdb
+                         :stmt-cache            statement-cache
+                         :default-result-set-fn default-result-set-fn}]
     (->> (pragma->set-pragma-query pragma read-only)
       (run! #(q* conn % default-result-set-fn)))
-    ;; Stops pragma statements polluting the cache
-    {:pdb        *pdb
-     :stmt-cache statement-cache}))
+    conn))
 
 (defn init-pool!
   [db-name & [{:keys [pool-size pragma read-only vfs default-result-set-fn]
@@ -200,12 +199,11 @@
         pool  (LinkedBlockingQueue/new ^int pool-size)]
     (run! #(BlockingQueue/.add pool %) conns)
     {:conn-pool   pool
-     :default-result-set-fn default-result-set-fn
      :connections conns
      :close
      (fn [] (run! (fn [conn] (api/close (:pdb conn))) conns))}))
 
-(defn default-result-set-fn
+(defn unwrap-result-set-fn
   [col-metadata result-set]
   (let [result (if (= (count col-metadata) 1)
                  (into [] cat result-set)
@@ -217,7 +215,7 @@
   The same pragma are set for both pools."
   [url & [{:keys [pool-size pragma writer-pragma vfs
                   default-result-set-fn]
-           :or   {default-result-set-fn default-result-set-fn
+           :or   {default-result-set-fn unwrap-result-set-fn
                   pool-size (Runtime/.availableProcessors
                               (Runtime/getRuntime))}}]]
   (assert (< 0 pool-size))
@@ -244,9 +242,8 @@
 
 (defn q
   "Run a query against a db. Return nil when no results."
-  [{:keys [conn-pool default-result-set-fn] :as tx} query &
-   [{:keys [result-set-fn]
-     :or   {result-set-fn default-result-set-fn}}] ]
+  [{:keys [conn-pool] :as tx} query &
+   [{:keys [result-set-fn]}] ]
   (if conn-pool
     (binding [*print-length* nil]
       (let [conn (BlockingQueue/.take conn-pool)]
@@ -255,7 +252,7 @@
           ;; Always return the conn even on error
           (finally (BlockingQueue/.offer conn-pool conn)))))
     ;; If we don't have a connection pool then we have a tx.
-    (result-set-fn (q* tx query result-set-fn))))
+    (q* tx query result-set-fn)))
 
 (defn optimize-db
   "Use for running optimise on long lived connections. For query_only
