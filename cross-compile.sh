@@ -34,6 +34,8 @@ do
         -DSQLITE_ENABLE_FTS5 \
         -DSQLITE_MAX_MMAP_SIZE=1099511627776 \
         -DSQLITE_ENABLE_COLUMN_METADATA \
+        -DSQLITE_ENABLE_SESSION \
+        -DSQLITE_ENABLE_PREUPDATE_HOOK \
         sqlite3.c -lpthread $dl -lm -o sqlite3.so -target $target
     cp -v sqlite3.so ../resources/sqlite3_$target.$extension
 done
